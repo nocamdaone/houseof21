@@ -762,6 +762,38 @@ button.irow:disabled { opacity: 0.55; }
   .mp-join .mp-label { grid-column: 1 / -1; }
 }
 
+/* ---- Same-screen (pass & play) ------------------------------------------ */
+.mp-count { max-width: 420px; width: 100%; }
+.mp-lseats { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); max-width: 760px; }
+.mp-lseat { gap: 0.4rem; padding: 0.5rem 0.6rem; }
+.mp-lseat .mp-input { flex: 1 1 auto; min-width: 0; width: auto; }
+.mp-lseat .key-small { padding: 0.3rem 0.45rem; flex: 0 0 auto; }
+.mp-lnum { font-size: 0.62rem; letter-spacing: 0.2em; color: var(--amber); flex: 0 0 auto; }
+
+.pass-curtain {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 55;
+  display: flex; align-items: center; justify-content: center; overflow: auto;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 40%, #16231a 0%, #070b08 60%, #020302 100%);
+}
+.pass-box {
+  display: flex; flex-direction: column; align-items: center; gap: 0.7rem; text-align: center;
+  width: 100%; max-width: 440px; padding: 1.4rem 1.2rem;
+  border: 1px solid var(--phos-faint); border-radius: 10px; background: rgba(6, 10, 7, 0.75);
+}
+.pass-kicker { font-size: 0.62rem; letter-spacing: 0.3em; color: var(--phos-dim); }
+.pass-face { width: clamp(90px, 20vh, 140px); }
+.pass-face svg { width: 100%; height: auto; display: block; }
+.pass-title { margin: 0; font-size: clamp(1.2rem, 4vw, 1.8rem); letter-spacing: 0.18em; color: var(--dirty); font-weight: 700; text-wrap: balance; }
+.pass-name { color: var(--amber); }
+.pass-lives { color: var(--red); letter-spacing: 0.15em; font-size: 0.85rem; }
+.pass-why { font-size: 0.78rem; letter-spacing: 0.18em; color: var(--phos); }
+.pass-note { margin: 0; font-size: 0.72rem; line-height: 1.5; color: var(--phos-dim); }
+.pass-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; justify-content: center; }
+.pass-actions .key-primary:disabled { opacity: 0.5; }
+
 </style>
 </head>
 <body class="fx-full">
@@ -4186,6 +4218,477 @@ button.irow:disabled { opacity: 0.55; }
 
 </script>
 <script>
+/* ---- net.js ---- */
+/* ==========================================================================
+   HOUSE OF 21 — net.js
+   Online rooms for a plain static website (GitHub Pages or any web host).
+
+   There is no game server. Each browser signs small messages and swaps them
+   through public Nostr relays: ordinary secure WebSockets (wss://, port 443).
+   Messages are "ephemeral" events, which relays pass along but do not store.
+   The table itself is still run by the host player's browser (see mp.js).
+
+   This file offers the same calls mp.js already uses for rooms:
+     room.join(name) -> Promise<room>;  room.presence(patch);  room.peers();
+     room.onPeers(fn);  room.leave()
+   Classic script, ES2017 syntax. BigInt is used at runtime (Chrome 67+),
+   built with BigInt() calls so older parsers can still load the file.
+   ========================================================================== */
+/* global BigInt, WebSocket */
+(function (H) {
+  'use strict';
+
+  var RELAYS = [
+    'wss://relay.damus.io',
+    'wss://nos.lol',
+    'wss://relay.primal.net',
+    'wss://nostr.mom',
+    'wss://relay.snort.social'
+  ];
+  var KIND = 25721;             // ephemeral range: relayed, never stored
+  var PREFIX = 'house21-v1-';   // topic tag prefix, one topic per room
+  var HEARTBEAT_MS = 4000;      // resend full presence this often
+  var EXPIRE_MS = 15000;        // a peer silent this long has left
+  var MIN_GAP_MS = 200;         // coalesce rapid presence changes
+  var MAX_PRESENCE = 4096;      // same limit as the claude.ai room
+  var CONNECT_WAIT_MS = 9000;
+
+  function now() { return Date.now(); }
+  function noop() {}
+
+  function available() {
+    try {
+      return /^https?:$/.test(location.protocol) && typeof WebSocket === 'function' &&
+        typeof BigInt === 'function' && typeof TextEncoder === 'function' &&
+        !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues);
+    } catch (e) { return false; }
+  }
+
+  /* ======================================================================
+     1. Hashing and hex helpers
+     ====================================================================== */
+  var enc = typeof TextEncoder === 'function' ? new TextEncoder() : null;
+  function hexToBytes(h) {
+    var out = new Uint8Array(h.length / 2);
+    for (var i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+    return out;
+  }
+  function bytesToHex(b) {
+    var s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
+  }
+  function concat(list) {
+    var n = 0, i;
+    for (i = 0; i < list.length; i++) n += list[i].length;
+    var out = new Uint8Array(n), o = 0;
+    for (i = 0; i < list.length; i++) { out.set(list[i], o); o += list[i].length; }
+    return out;
+  }
+  function sha256(bytes) {
+    return window.crypto.subtle.digest('SHA-256', bytes).then(function (d) { return new Uint8Array(d); });
+  }
+  var tagCache = {};
+  function taggedHash(tag, msgBytes) {
+    var th = tagCache[tag] ? Promise.resolve(tagCache[tag]) : sha256(enc.encode(tag)).then(function (h) { tagCache[tag] = h; return h; });
+    return th.then(function (h) { return sha256(concat([h, h, msgBytes])); });
+  }
+  function randBytes(n) { var b = new Uint8Array(n); window.crypto.getRandomValues(b); return b; }
+
+  /* ======================================================================
+     2. secp256k1 + BIP-340 Schnorr signatures (what Nostr relays verify)
+     ====================================================================== */
+  var CV = null;
+  function curve() {
+    if (CV) return CV;
+    var B = BigInt;
+    CV = {
+      P: B('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F'),
+      N: B('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141'),
+      GX: B('0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798'),
+      GY: B('0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8'),
+      Z: B(0), O: B(1), T: B(2), TH: B(3), F: B(4), E: B(8), S: B(7),
+      table: null
+    };
+    return CV;
+  }
+  function md(a, m) { var r = a % m; return r < CV.Z ? r + m : r; }
+  function inv(a, m) {
+    var lm = CV.O, hm = CV.Z, low = md(a, m), high = m;
+    while (low > CV.O) {
+      var r = high / low;
+      var nm = hm - lm * r, nw = high - low * r;
+      hm = lm; high = low; lm = nm; low = nw;
+    }
+    return md(lm, m);
+  }
+  function powmod(b, e, m) {
+    var r = CV.O; b = md(b, m);
+    while (e > CV.Z) {
+      if (e & CV.O) r = (r * b) % m;
+      b = (b * b) % m;
+      e >>= CV.O;
+    }
+    return r;
+  }
+  // Jacobian points {x, y, z}; z = 0 means the point at infinity.
+  function jDouble(p) {
+    var P = CV.P;
+    if (p.z === CV.Z || p.y === CV.Z) return { x: CV.Z, y: CV.O, z: CV.Z };
+    var xx = (p.x * p.x) % P, yy = (p.y * p.y) % P, yyyy = (yy * yy) % P;
+    var s = md(CV.F * p.x * yy, P), m = md(CV.TH * xx, P);
+    var x3 = md(m * m - CV.T * s, P);
+    var y3 = md(m * (s - x3) - CV.E * yyyy, P);
+    var z3 = md(CV.T * p.y * p.z, P);
+    return { x: x3, y: y3, z: z3 };
+  }
+  function jAddAffine(p, q) { // q = {x, y} affine
+    var P = CV.P;
+    if (p.z === CV.Z) return { x: q.x, y: q.y, z: CV.O };
+    var z1z1 = (p.z * p.z) % P;
+    var u2 = (q.x * z1z1) % P, s2 = (q.y * p.z * z1z1) % P;
+    var h = md(u2 - p.x, P), r = md(s2 - p.y, P);
+    if (h === CV.Z) return r === CV.Z ? jDouble(p) : { x: CV.Z, y: CV.O, z: CV.Z };
+    var hh = (h * h) % P, hhh = (h * hh) % P, v = (p.x * hh) % P;
+    var x3 = md(r * r - hhh - CV.T * v, P);
+    var y3 = md(r * (v - x3) - p.y * hhh, P);
+    return { x: x3, y: y3, z: (p.z * h) % P };
+  }
+  function toAffine(p) {
+    if (p.z === CV.Z) return null;
+    var P = CV.P, zi = inv(p.z, P), zi2 = (zi * zi) % P;
+    return { x: (p.x * zi2) % P, y: (p.y * zi2 * zi) % P };
+  }
+  function mul(k, aff) { // generic double-and-add
+    var acc = { x: CV.Z, y: CV.O, z: CV.Z };
+    var bits = k.toString(2);
+    for (var i = 0; i < bits.length; i++) {
+      acc = jDouble(acc);
+      if (bits.charAt(i) === '1') acc = jAddAffine(acc, aff);
+    }
+    return toAffine(acc);
+  }
+  function mulG(k) { // fixed base: table[i] = 2^i * G
+    if (!CV.table) {
+      var t = [], p = { x: CV.GX, y: CV.GY, z: CV.O };
+      for (var i = 0; i < 256; i++) { t.push(toAffine(p)); p = jDouble(p); }
+      CV.table = t;
+    }
+    var acc = { x: CV.Z, y: CV.O, z: CV.Z }, j = 0, kk = k;
+    while (kk > CV.Z) {
+      if (kk & CV.O) acc = jAddAffine(acc, CV.table[j]);
+      kk >>= CV.O; j++;
+    }
+    return toAffine(acc);
+  }
+  function hex32(n) { var s = n.toString(16); while (s.length < 64) s = '0' + s; return s; }
+  function big(hex) { return BigInt('0x' + (hex || '0')); }
+  function even(n) { return (n & CV.O) === CV.Z; }
+
+  function makeKey(seedHex) {
+    curve();
+    var d0;
+    do { d0 = md(big(seedHex || bytesToHex(randBytes(32))), CV.N); seedHex = null; } while (d0 === CV.Z);
+    var P = mulG(d0);
+    return { d: even(P.y) ? d0 : CV.N - d0, pub: hex32(P.x) };
+  }
+
+  /** BIP-340 sign. msgHex: 32-byte hex. Returns Promise<128-hex signature>. */
+  function schnorrSign(msgHex, key, auxHex) {
+    curve();
+    var msg = hexToBytes(msgHex), pubB = hexToBytes(key.pub);
+    var aux = auxHex ? hexToBytes(auxHex) : randBytes(32);
+    return taggedHash('BIP0340/aux', aux).then(function (h) {
+      var t = hexToBytes(hex32(key.d ^ big(bytesToHex(h))));
+      return taggedHash('BIP0340/nonce', concat([t, pubB, msg]));
+    }).then(function (h) {
+      var k0 = md(big(bytesToHex(h)), CV.N);
+      if (k0 === CV.Z) throw new Error('bad nonce');
+      var R = mulG(k0);
+      var k = even(R.y) ? k0 : CV.N - k0;
+      var rx = hexToBytes(hex32(R.x));
+      return taggedHash('BIP0340/challenge', concat([rx, pubB, msg])).then(function (eh) {
+        var e = md(big(bytesToHex(eh)), CV.N);
+        return bytesToHex(rx) + hex32(md(k + e * key.d, CV.N));
+      });
+    });
+  }
+
+  /** BIP-340 verify (used by the self-test; relays do this for real). */
+  function schnorrVerify(msgHex, pubHex, sigHex) {
+    curve();
+    var x = big(pubHex), P = CV.P;
+    if (x >= P) return Promise.resolve(false);
+    var c = md(x * x * x + CV.S, P), y = powmod(c, (P + CV.O) / CV.F, P);
+    if ((y * y) % P !== c) return Promise.resolve(false);
+    var Pt = { x: x, y: even(y) ? y : P - y };
+    var r = big(sigHex.slice(0, 64)), s = big(sigHex.slice(64));
+    if (r >= P || s >= CV.N) return Promise.resolve(false);
+    return taggedHash('BIP0340/challenge', concat([hexToBytes(sigHex.slice(0, 64)), hexToBytes(pubHex), hexToBytes(msgHex)])).then(function (eh) {
+      var e = md(big(bytesToHex(eh)), CV.N);
+      var a = mulG(s), b = mul(CV.N - e, Pt);
+      if (!a || !b) return false;
+      var R = toAffine(jAddAffine({ x: a.x, y: a.y, z: CV.O }, b));
+      return !!R && even(R.y) && R.x === r;
+    });
+  }
+
+  /* ======================================================================
+     3. Relay pool
+     ====================================================================== */
+  var KEY = null;
+  var pool = { relays: [], topics: {}, seen: {}, seenList: [], watchers: [], signQ: Promise.resolve() };
+
+  function openCount() { return pool.relays.filter(function (r) { return r.open; }).length; }
+  function notifyWatchers() { pool.watchers.slice().forEach(function (f) { try { f(openCount()); } catch (e) { /* ignore */ } }); }
+
+  function subId(topic) { return 'h' + topic.slice(-58); }
+  function reqFor(topic) {
+    return JSON.stringify(['REQ', subId(topic), { kinds: [KIND], '#t': [topic], since: Math.floor(now() / 1000) - 20 }]);
+  }
+  function sendRaw(R, s) { try { if (R.open) R.ws.send(s); } catch (e) { /* closed */ } }
+
+  function openRelay(url) {
+    var R = { url: url, ws: null, open: false, tries: 0, timer: 0, rejects: 0 };
+    function connect() {
+      try { R.ws = new WebSocket(url); } catch (e) { retry(); return; }
+      R.ws.onopen = function () {
+        R.open = true; R.tries = 0;
+        Object.keys(pool.topics).forEach(function (t) { sendRaw(R, reqFor(t)); });
+        notifyWatchers();
+      };
+      R.ws.onmessage = function (m) { onRelayMessage(R, m.data); };
+      R.ws.onclose = function () { var was = R.open; R.open = false; if (was) notifyWatchers(); retry(); };
+      R.ws.onerror = noop;
+    }
+    function retry() {
+      clearTimeout(R.timer);
+      R.tries += 1;
+      R.timer = setTimeout(connect, Math.min(30000, 1000 * Math.pow(2, Math.min(R.tries, 5))) + Math.random() * 500);
+    }
+    connect();
+    return R;
+  }
+
+  function onRelayMessage(R, data) {
+    var m;
+    try { m = JSON.parse(data); } catch (e) { return; }
+    if (!Array.isArray(m)) return;
+    if (m[0] === 'EVENT') {
+      var ev = m[2];
+      if (!ev || typeof ev !== 'object' || ev.kind !== KIND || typeof ev.id !== 'string' || typeof ev.content !== 'string') return;
+      if (pool.seen[ev.id]) return;
+      pool.seen[ev.id] = 1;
+      pool.seenList.push(ev.id);
+      if (pool.seenList.length > 3000) delete pool.seen[pool.seenList.shift()];
+      var topic = null;
+      (ev.tags || []).forEach(function (t) { if (Array.isArray(t) && t[0] === 't') topic = t[1]; });
+      var h = topic && pool.topics[topic];
+      if (h) h(ev);
+    } else if (m[0] === 'OK' && m[2] === false) {
+      R.rejects += 1;
+      if (window.console && R.rejects < 4) console.warn('[net] ' + R.url + ' refused a message: ' + m[3]);
+    } else if (m[0] === 'CLOSED') {
+      // The relay dropped a subscription (rate limit, restart): ask again soon.
+      var sid = m[1];
+      setTimeout(function () {
+        Object.keys(pool.topics).forEach(function (t) { if (subId(t) === sid) sendRaw(R, reqFor(t)); });
+      }, 3000);
+    }
+  }
+
+  function subscribe(topic, handler) {
+    pool.topics[topic] = handler;
+    var s = reqFor(topic);
+    pool.relays.forEach(function (R) { sendRaw(R, s); });
+  }
+  function unsubscribe(topic) {
+    delete pool.topics[topic];
+    var s = JSON.stringify(['CLOSE', subId(topic)]);
+    pool.relays.forEach(function (R) { sendRaw(R, s); });
+  }
+
+  /** Sign and send one event to every open relay, keeping send order. */
+  function publish(topic, content) {
+    pool.signQ = pool.signQ.then(function () {
+      var ev = { pubkey: KEY.pub, created_at: Math.floor(now() / 1000), kind: KIND, tags: [['t', topic]], content: content };
+      var ser = JSON.stringify([0, ev.pubkey, ev.created_at, ev.kind, ev.tags, ev.content]);
+      return sha256(enc.encode(ser)).then(function (id) {
+        ev.id = bytesToHex(id);
+        return schnorrSign(ev.id, KEY);
+      }).then(function (sig) {
+        ev.sig = sig;
+        var s = JSON.stringify(['EVENT', ev]);
+        pool.relays.forEach(function (R) { sendRaw(R, s); });
+      });
+    }).catch(function (e) { if (window.console) console.warn('[net] send failed', e && e.message); });
+    return pool.signQ;
+  }
+
+  /* ======================================================================
+     4. Rooms with presence (same shape as the claude.ai room capability)
+     ====================================================================== */
+  function freezeDeep(o) {
+    if (o && typeof o === 'object') { Object.keys(o).forEach(function (k) { freezeDeep(o[k]); }); Object.freeze(o); }
+    return o;
+  }
+  var byteLen = function (s) { return enc.encode(s).length; };
+
+  function mkRoom(name) {
+    var topic = PREFIX + name;
+    var ME = KEY.pub;
+    var peersMap = {}, gone = {}, mine = {}, mineStr = '{}', handlers = [], live = true;
+    var lastSent = 0, timer = 0;
+    peersMap[ME] = { presence: freezeDeep({}), str: '{}', updatedAt: now(), seen: now(), s: 0 };
+
+    function snap() {
+      return Object.freeze(Object.keys(peersMap).map(function (p) {
+        return Object.freeze({ peer: p, by: null, isMe: p === ME, sameTab: p === ME, kind: 'viewer', guest: false, presence: peersMap[p].presence, updatedAt: peersMap[p].updatedAt });
+      }));
+    }
+    function fire(j, l, u) {
+      var s = snap();
+      handlers.slice().forEach(function (h) {
+        try { h({ peers: s, joined: j || [], left: l || [], updated: u || [] }); } catch (e) { setTimeout(function () { throw e; }); }
+      });
+    }
+    function sendNow() {
+      if (!live) return;
+      clearTimeout(timer); timer = 0;
+      lastSent = now();
+      SEQ += 1;
+      publish(topic, JSON.stringify({ r: name, ty: 'p', s: SEQ, p: mine }));
+    }
+    function schedule() {
+      if (!live) return;
+      var wait = MIN_GAP_MS - (now() - lastSent);
+      if (wait <= 0) { sendNow(); return; }
+      if (!timer) timer = setTimeout(sendNow, wait);
+    }
+    function onEvent(ev) {
+      if (!live || ev.pubkey === ME) return;
+      if (now() / 1000 - ev.created_at > 60) return;
+      var m;
+      try { m = JSON.parse(ev.content); } catch (e) { return; }
+      if (!m || typeof m !== 'object' || m.r !== name) return;
+      var pr = ev.pubkey, ex = peersMap[pr], t = now();
+      if (typeof m.s !== 'number') return;
+      if (m.ty === 'bye') {
+        gone[pr] = Math.max(gone[pr] || 0, m.s);
+        if (ex) { delete peersMap[pr]; fire([], [{ peer: pr }], []); }
+        return;
+      }
+      if (gone[pr] && m.s <= gone[pr]) return;
+      if (ex && m.s <= ex.s) { ex.seen = t; return; }
+      var pres = (m.p && typeof m.p === 'object' && !Array.isArray(m.p)) ? m.p : {};
+      var str = JSON.stringify(pres);
+      if (byteLen(str) > MAX_PRESENCE + 512) return;
+      var changed = !ex || ex.str !== str;
+      peersMap[pr] = { presence: changed ? freezeDeep(JSON.parse(str)) : ex.presence, str: str, updatedAt: changed ? t : ex.updatedAt, seen: t, s: m.s };
+      if (!ex) { schedule(); fire([{ peer: pr }], [], []); } // greet newcomers with our state
+      else if (changed) fire([], [], [{ peer: pr }]);
+    }
+    subscribe(topic, onEvent);
+    var hb = setInterval(function () {
+      if (!live) return;
+      if (now() - lastSent > HEARTBEAT_MS * 0.8) sendNow();
+      var t = now(), left = [];
+      Object.keys(peersMap).forEach(function (p) {
+        if (p !== ME && t - peersMap[p].seen > EXPIRE_MS) { delete peersMap[p]; left.push({ peer: p }); }
+      });
+      if (left.length) fire([], left, []);
+    }, HEARTBEAT_MS);
+    setTimeout(schedule, 0);
+
+    var room = {
+      name: name,
+      presence: function (patch) {
+        if (!live) return Promise.reject({ code: 'closed', message: 'room left' });
+        var next = {};
+        Object.keys(mine).forEach(function (k) { next[k] = mine[k]; });
+        Object.keys(patch || {}).forEach(function (k) { if (patch[k] === null) delete next[k]; else next[k] = patch[k]; });
+        var str = JSON.stringify(next);
+        if (byteLen(str) > MAX_PRESENCE) return Promise.reject({ code: 'invalid_argument', message: 'presence over 4 KiB' });
+        mine = JSON.parse(str); mineStr = str;
+        peersMap[ME] = { presence: freezeDeep(JSON.parse(str)), str: str, updatedAt: now(), seen: now(), s: SEQ };
+        schedule();
+        setTimeout(function () { if (live) fire([], [], [{ peer: ME }]); }, 0);
+        return Promise.resolve();
+      },
+      peers: snap,
+      onPeers: function (h) {
+        handlers.push(h);
+        setTimeout(function () { if (!live) return; var s = snap(); h({ peers: s, joined: s, left: [], updated: [] }); }, 0);
+        return function () { handlers = handlers.filter(function (x) { return x !== h; }); };
+      },
+      connected: function () { return openCount() > 0; },
+      emit: function () { return Promise.resolve(); },
+      on: function () { return noop; },
+      leave: function () {
+        if (live) {
+          clearTimeout(timer);
+          SEQ += 1;
+          publish(topic, JSON.stringify({ r: name, ty: 'bye', s: SEQ }));
+        }
+        live = false;
+        clearInterval(hb);
+        handlers = [];
+        setTimeout(function () { if (pool.topics[topic] === onEvent) unsubscribe(topic); }, 1500);
+        if (rooms[name] === room) delete rooms[name];
+        return Promise.resolve();
+      }
+    };
+    return room;
+  }
+
+  var rooms = {};
+  var lobby = null;
+  var SEQ = 0; // one counter per tab, so a peer's messages always count up
+  function makeLobby() {
+    return {
+      name: 'lobby',
+      join: function (n) {
+        if (!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(n)) return Promise.reject({ code: 'invalid_argument', message: 'bad room name' });
+        if (!rooms[n]) rooms[n] = mkRoom(n);
+        return Promise.resolve(rooms[n]);
+      },
+      presence: function () { return Promise.resolve(); },
+      peers: function () { return Object.freeze([Object.freeze({ peer: KEY.pub, isMe: true, sameTab: true, presence: Object.freeze({}) })]); },
+      onPeers: function () { return noop; },
+      connected: function () { return openCount() > 0; },
+      onConnection: function (f) { pool.watchers.push(function (n) { f(n > 0); }); return noop; },
+      leave: function () { return Promise.resolve(); }
+    };
+  }
+
+  /** Resolves to a room lobby once a relay answers, or null if none can be reached. */
+  var connecting = null;
+  function connect() {
+    if (!available()) return Promise.resolve(null);
+    if (connecting) return connecting;
+    connecting = new Promise(function (res) {
+      try { if (!KEY) KEY = makeKey(); } catch (e) { res(null); return; }
+      if (!lobby) lobby = makeLobby();
+      var done = false;
+      function finish(v) { if (!done) { done = true; res(v); } }
+      pool.watchers.push(function (n) { if (n > 0) finish(lobby); });
+      if (!pool.relays.length) pool.relays = RELAYS.map(openRelay);
+      else if (openCount() > 0) finish(lobby);
+      setTimeout(function () { finish(openCount() > 0 ? lobby : null); }, CONNECT_WAIT_MS);
+    }).then(function (v) { if (!v) connecting = null; return v; });
+    return connecting;
+  }
+
+  H.Net = {
+    available: available,
+    connect: connect,
+    relays: function () { return pool.relays.map(function (r) { return { url: r.url, open: r.open }; }); },
+    _t: { makeKey: makeKey, sign: schnorrSign, verify: schnorrVerify, sha256: sha256, hex: bytesToHex, RELAYS: RELAYS, KIND: KIND }
+  };
+})(window.H21 = window.H21 || {});
+
+</script>
+<script>
 /* ---- mp.js ---- */
 /* ==========================================================================
    HOUSE OF 21 — mp.js
@@ -4462,6 +4965,8 @@ button.irow:disabled { opacity: 0.55; }
     return { rp: fill(false), hs: fill(false), sh: fill(null), cl: fill(false), tq: fill(0), tqn: fill(false), flu: fill(0) };
   }
   function hS() { return HOST.S; }
+  /** Timer lengths. Same-screen games have no clocks: people pass the device. */
+  function tm(k) { return HOST && HOST.local ? 864e5 : M()[k]; }
   function serial() { hS().serial += 1; return hS().serial; }
   function newInv(id) { return { uid: 'i' + serial(), id: id, offer: id === 'pandora' ? rollOffer() : null }; }
   function hlog(e) {
@@ -4497,7 +5002,7 @@ button.irow:disabled { opacity: 0.55; }
       S.players[a].intel.x = { t: t, c: encList(S.players[t].initial), u: now() + H.CONFIG.xrayDurationMs };
     },
     burner: function (a, t, r) { var S = hS(); S.players[a].intel.b = { t: t, r: r, n: cardCount(S.players[t]) }; },
-    ask: function (i, kind, data) { return ask(i, kind, data, M().askMs); },
+    ask: function (i, kind, data) { return ask(i, kind, data, tm('askMs')); },
     flu: function (i) {
       var fx = hS().fx;
       fx.flu[i] = H.CONFIG.fluShotRounds;
@@ -4547,7 +5052,7 @@ button.irow:disabled { opacity: 0.55; }
     var S = hS();
     if (!alive(S.players[i])) return Promise.resolve(askDefault(kind, data));
     var id = serial();
-    S.asks.push({ id: id, p: i, k: kind, d: data, u: now() + (ms || M().askMs) });
+    S.asks.push({ id: id, p: i, k: kind, d: data, u: now() + (ms || tm('askMs')) });
     publish();
     return new Promise(function (res) { HOST.pending[id] = { res: res, kind: kind, data: data }; });
   }
@@ -4586,7 +5091,7 @@ button.irow:disabled { opacity: 0.55; }
       fx: newFx(n), deck: [], discard: [], turn: null, deadline: 0, revealUntil: 0, asks: [],
       log: [], logN: 0, serial: 0, winner: null, res: null, seq: 0, actions: 0
     };
-    HOST = { room: room, S: S, lastSeq: {}, q: Promise.resolve(), pending: {}, busy: false, autoPending: false, timer: 0 };
+    HOST = { room: room, local: !room, S: S, lastSeq: {}, q: Promise.resolve(), pending: {}, busy: false, autoPending: false, timer: 0 };
     S.players.forEach(function (p) {
       p.inventory = Items.randomIds(M().startItems, { exclude: EXCLUDED }).map(newInv);
     });
@@ -4632,13 +5137,13 @@ button.irow:disabled { opacity: 0.55; }
       return;
     }
     S.turn = order[0];
-    S.deadline = now() + M().turnMs;
+    S.deadline = now() + tm('turnMs');
   }
 
   function startInter() {
     var S = hS();
     S.phase = 'inter';
-    S.deadline = now() + M().interMs;
+    S.deadline = now() + tm('interMs');
     aliveIdx(S).forEach(function (i) {
       var p = S.players[i];
       p.shop = Items.randomIds(M().shopSize, { exclude: EXCLUDED, distinct: true });
@@ -4671,7 +5176,7 @@ button.irow:disabled { opacity: 0.55; }
       var j = (from + k + n) % n;
       if (alive(S.players[j]) && !isDone(S.players[j])) {
         S.turn = j;
-        S.deadline = now() + M().turnMs;
+        S.deadline = now() + tm('turnMs');
         return;
       }
     }
@@ -4788,7 +5293,7 @@ button.irow:disabled { opacity: 0.55; }
         var opp = opponentsOf(S, i)[0];
         var opts = p.inventory.filter(function (inv) { return mpCanUse(S, i, inv.uid, 'rescue', opp).ok; });
         if (!opts.length || opp === undefined) { p.declined = true; return; }
-        return ask(i, 'rescue', { t: total(focusHand(p)), o: opts.map(function (x) { return x.uid; }) }, M().rescueMs).then(function (v) {
+        return ask(i, 'rescue', { t: total(focusHand(p)), o: opts.map(function (x) { return x.uid; }) }, tm('rescueMs')).then(function (v) {
           if (v && opts.some(function (o) { return o.uid === v.u; })) {
             return useItem(i, v.u, v.p || {}, opp, 'rescue').then(function (used) {
               if (!used) { p.declined = true; return; }
@@ -4846,7 +5351,7 @@ button.irow:disabled { opacity: 0.55; }
       pre = Promise.all(aliveIdx(S).map(function (i) {
         return mysteriesOf(S.players[i]).reduce(function (pr, m) {
           return pr.then(function () {
-            return ask(i, 'my', total(m.hand), M().askMs).then(function (keep) { settleMystery(i, m, keep); });
+            return ask(i, 'my', total(m.hand), tm('askMs')).then(function (keep) { settleMystery(i, m, keep); });
           });
         }, Promise.resolve());
       }));
@@ -4978,7 +5483,7 @@ button.irow:disabled { opacity: 0.55; }
   /** Read every peer's latest action. Runs on room updates and on a timer
       (room updates are per animation frame, which pause in hidden tabs). */
   function pollPeers(peers) {
-    if (!HOST) return;
+    if (!HOST || !HOST.room) return;
     var S = hS();
     (peers || HOST.room.peers()).forEach(function (pr) {
       if (pr.isMe && pr.sameTab) return;
@@ -5074,7 +5579,8 @@ button.irow:disabled { opacity: 0.55; }
     seq: 0, pending: null, pendingAt: 0, outbox: [],
     log: [], logSeen: 0, answered: {}, askOpen: null, lastBanner: 0,
     lastPhase: null, lastRound: 0, shownOver: null, interSig: '', overlay: false,
-    ffaCells: {}, dismissed: {}, notice: '', name: '', av: 0
+    ffaCells: {}, dismissed: {}, notice: '', name: '', av: 0,
+    online: false, via: '', local: false, viewer: -1, curtainFor: null, seats: null, seatCount: 4
   };
 
   function loadProfile() {
@@ -5104,7 +5610,16 @@ button.irow:disabled { opacity: 0.55; }
   /* ---- connection ---- */
   function connect() {
     if (C.room) return Promise.resolve(C.room);
-    if (!window.claude || typeof window.claude.use !== 'function') return Promise.resolve(null);
+    if (!window.claude || typeof window.claude.use !== 'function') {
+      // A plain website (GitHub Pages): rooms run through public relays (net.js).
+      if (H.Net && H.Net.available()) {
+        C.via = 'net';
+        return H.Net.connect().then(function (room) { C.room = room || null; return C.room; }, function () { return null; });
+      }
+      C.via = 'file';
+      return Promise.resolve(null);
+    }
+    C.via = 'claude';
     var timeout = new Promise(function (res) { setTimeout(function () { res(null); }, 10000); });
     return Promise.race([window.claude.use('room'), timeout]).then(function (room) {
       C.room = room || null;
@@ -5119,7 +5634,7 @@ button.irow:disabled { opacity: 0.55; }
     C.stage = 'connecting';
     renderMulti();
     connect().then(function (room) {
-      if (!room) { C.stage = 'unavailable'; renderMulti(); return; }
+      C.online = !!room;
       C.stage = 'menu';
       renderMulti();
     });
@@ -5138,6 +5653,7 @@ button.irow:disabled { opacity: 0.55; }
     C.S = null; C.gameId = null; C.lastN = 0; C.myIdx = -1; C.pending = null; C.outbox = [];
     C.log = []; C.logSeen = 0; C.answered = {}; C.askOpen = null; C.lastPhase = null; C.interSig = '';
     C.overlay = false; C.hostPeer = null; C.isHost = false; C.expect = null;
+    C.local = false; C.viewer = -1; C.curtainFor = null; hideCurtain();
     clearInterval(C.uiTimer); C.uiTimer = 0;
     var stage = $('oppStage');
     if (stage) stage.classList.remove('ffa');
@@ -5386,7 +5902,10 @@ button.irow:disabled { opacity: 0.55; }
     C.lastN = w.n;
     C.offset = local ? 0 : now() - w.hn;
     C.S = decode(w);
-    C.myIdx = me ? roster.indexOf(me) : -1;
+    if (C.local) {
+      if (C.viewer < 0) { C.viewer = neededViewer(); if (C.viewer === null) C.viewer = 0; C.curtainFor = null; showCurtain(C.viewer); }
+      C.myIdx = C.viewer;
+    } else C.myIdx = me ? roster.indexOf(me) : -1;
     if (C.stage !== 'match') enterMatch();
     var mine = C.myIdx >= 0 ? C.S.players[C.myIdx] : null;
     // Acknowledged actions free the outbox.
@@ -5410,7 +5929,97 @@ button.irow:disabled { opacity: 0.55; }
     }
     phaseEffects();
     render();
+    if (C.local) localHandoff();
+    if (C.curtainFor === null) handleAsks();
+  }
+
+  /* ---- same-screen play: who needs the screen, and the pass-over cover ---- */
+  function neededViewer() {
+    var S = C.S;
+    if (!S) return null;
+    if (S.asks.length) return S.asks[0].p;
+    if (S.phase === 'play' && S.turn !== null && S.turn !== undefined) return S.turn;
+    if (S.phase === 'inter') {
+      var al = aliveIdx(S);
+      for (var k = 0; k < al.length; k++) if (!S.players[al[k]].ready) return al[k];
+    }
+    return null;
+  }
+  function localHandoff() {
+    var need = neededViewer();
+    if (need === null) { if (C.curtainFor !== null) hideCurtain(); C.curtainFor = null; return; }
+    if (need === C.viewer && C.curtainFor === null) return;
+    if (need !== C.curtainFor) showCurtain(need);
+  }
+  function curtainReason(i) {
+    var S = C.S, a = null;
+    S.asks.forEach(function (x) { if (!a && x.p === i) a = x; });
+    if (a) return a.k === 'rescue' ? 'YOU BUSTED · SAVE IT WITH AN ITEM?' : a.k === 'my' ? 'YOUR SEALED CARD' : a.k === 'dw' ? 'DEAD WEIGHT · PICK A CARD' : 'SOMEONE NEEDS AN ANSWER';
+    if (S.phase === 'inter') return 'YOUR BREAK · SHOP, THEN READY';
+    return 'YOUR TURN · ROUND ' + pad(S.round);
+  }
+  function showCurtain(i) {
+    var S = C.S, p = S && S.players[i];
+    if (!p) return;
+    C.curtainFor = i;
+    UI.closeModal();
+    if (C.overlay) { UI.hideOverlay(); C.overlay = false; }
+    C.askOpen = null;
+    var el = $('passCurtain');
+    el.querySelector('.pass-face').innerHTML = avatarSVG(p.av);
+    el.querySelector('.pass-name').textContent = p.name;
+    el.querySelector('.pass-why').textContent = curtainReason(i);
+    el.querySelector('.pass-lives').textContent = livesText(p.lives) + '  ·  ' + p.tokens + (p.tokens === 1 ? ' TOKEN' : ' TOKENS');
+    var go = el.querySelector('#passGo');
+    go.textContent = "I'M " + p.name + ' · SHOW ME';
+    go.disabled = true;
+    el.hidden = false;
+    // A short pause so the last player can't tap straight through.
+    clearTimeout(C.curtainT);
+    C.curtainT = setTimeout(function () { go.disabled = false; }, 700);
+    FX.sfx('click');
+  }
+  function hideCurtain() {
+    var el = $('passCurtain');
+    if (el) el.hidden = true;
+  }
+  function revealForCurtain() {
+    if (C.curtainFor === null || !C.S) return;
+    var i = C.curtainFor;
+    C.curtainFor = null;
+    hideCurtain();
+    if (i !== C.viewer) {
+      C.viewer = i; C.myIdx = i;
+      // Rebuild the log from this player's point of view.
+      C.log = [];
+      var src = HOST ? HOST.S.log : C.S.log;
+      src.forEach(function (e) { var d = displayEntry(e); if (d) C.log.push(d); C.logSeen = Math.max(C.logSeen, e.n); });
+      var mine = C.S.players[i];
+      C.lastBanner = mine && mine.bn ? mine.bn.n : C.lastBanner;
+      C.interSig = ''; C.askOpen = null; C.ffaCells = {};
+      var grid = $('ffaGrid'); if (grid) grid.innerHTML = '';
+      if (C.S.mode === 'duel') UI.setOpponent(oppDef(duelOpp()));
+    }
+    FX.staticBurst(250, 0.25);
+    render();
     handleAsks();
+  }
+  function buildCurtain() {
+    if ($('passCurtain')) return;
+    var d = document.createElement('div');
+    d.id = 'passCurtain';
+    d.className = 'pass-curtain';
+    d.hidden = true;
+    d.setAttribute('role', 'dialog');
+    d.setAttribute('aria-modal', 'true');
+    d.innerHTML = '<div class="pass-box"><div class="pass-kicker">SAME SCREEN · PASS THE DEVICE</div>' +
+      '<div class="pass-face"></div><h2 class="pass-title">PASS TO <span class="pass-name"></span></h2>' +
+      '<div class="pass-lives"></div><div class="pass-why"></div>' +
+      '<p class="pass-note">Everyone else, look away. Cards and items stay hidden until you tap.</p>' +
+      '<div class="pass-actions"><button class="key key-primary" id="passGo">SHOW ME</button><button class="key key-small" id="passMenu">MENU</button></div></div>';
+    ($('app') || document.body).appendChild(d);
+    d.querySelector('#passGo').addEventListener('click', function () { FX.unlockAudio(); revealForCurtain(); });
+    d.querySelector('#passMenu').addEventListener('click', function () { FX.sfx('click'); onMenu(); });
   }
 
   function nameOf(i) {
@@ -5460,7 +6069,7 @@ button.irow:disabled { opacity: 0.55; }
   }
   function oppDef(i) {
     var p = C.S.players[i];
-    return { id: 'mp-' + C.S.id + '-' + i, name: p.name, alias: 'ONLINE', personality: 'Human', look: AVATARS[p.av] || AVATARS[0], traits: {}, lines: {}, dossier: '', traitText: '' };
+    return { id: 'mp-' + C.S.id + '-' + i, name: p.name, alias: C.local ? 'SAME SCREEN' : 'ONLINE', personality: 'Human', look: AVATARS[p.av] || AVATARS[0], traits: {}, lines: {}, dossier: '', traitText: '' };
   }
 
   function phaseEffects() {
@@ -5502,6 +6111,22 @@ button.irow:disabled { opacity: 0.55; }
     FX.staticBurst(900, 0.45);
     var won = S.winner === me && me >= 0;
     var title = S.winner === null ? 'DRAW' : (won ? 'VICTORY' : 'DEFEAT');
+    if (C.local) {
+      hideCurtain(); C.curtainFor = null;
+      setTimeout(function () {
+        UI.showResult({
+          kicker: 'SAME SCREEN · ' + (S.mode === 'duel' ? '1V1' : S.players.length + ' PLAYERS') + ' · ' + S.round + ' ROUNDS',
+          title: S.winner === null ? 'DRAW' : S.players[S.winner].name + ' WINS',
+          sub: S.winner === null ? 'Nobody walked away from this table.' : 'Last one standing out of ' + S.players.length + '.',
+          portrait: 'conductor', btn: 'PLAY AGAIN', btn2: 'TITLE'
+        }).then(function (w) {
+          stopHost(); resetMatchView();
+          if (w === 2) { C.stage = 'menu'; UI.showScreen('title'); return; }
+          C.stage = 'local'; UI.showScreen('multi'); renderMulti();
+        });
+      }, 1400);
+      return;
+    }
     var sub = S.winner === null ? 'Nobody walked away from this table.'
       : won ? (S.mode === 'duel' ? 'You took every one of their lives.' : 'Last one standing out of ' + S.players.length + '.')
         : (S.players[S.winner].name + ' outlasted you.');
@@ -5710,6 +6335,7 @@ button.irow:disabled { opacity: 0.55; }
      ====================================================================== */
   function livesText(n) { var s = ''; for (var i = 0; i < n; i++) s += '♥'; return s || '—'; }
   function secs(t) { return Math.max(0, Math.ceil((hostTime(t) - now()) / 1000)); }
+  function cd(t) { return C.local ? '' : ' · ' + secs(t) + 's'; }
 
   function myInventoryView() {
     var S = C.S, me = C.myIdx, p = S.players[me];
@@ -5747,14 +6373,14 @@ button.irow:disabled { opacity: 0.55; }
     if (!alive(p)) { status = 'ELIMINATED · SPECTATING'; turnTag = 'OUT'; }
     else if (S.phase === 'play') {
       if (S.asks.some(function (a) { return a.p === me; })) { status = 'ANSWER THE PROMPT'; turnTag = 'YOU'; }
-      else if (myTurn) { status = 'YOUR TURN · ' + secs(S.deadline) + 's'; turnTag = 'YOU'; }
+      else if (myTurn) { status = (C.local ? p.name + ' · ' : '') + 'YOUR TURN' + cd(S.deadline); turnTag = 'YOU'; }
       else if (C.pending) { status = 'SENDING…'; turnTag = 'YOU'; }
       else if (isDone(p)) { status = 'YOU ARE DONE · ' + turnName + ' PLAYING'; turnTag = turnName; }
-      else { status = turnName + ' IS DECIDING · ' + secs(S.deadline) + 's'; turnTag = turnName; }
+      else { status = turnName + ' IS DECIDING' + cd(S.deadline); turnTag = turnName; }
     } else if (S.phase === 'resolve') { status = S.asks.length ? 'WAITING FOR SEALED CARDS' : 'RESOLVING ROUND'; turnTag = 'REVEAL'; }
     else if (S.phase === 'inter') {
       var al = aliveIdx(S), rdy = al.filter(function (j) { return S.players[j].ready; }).length;
-      status = 'INTERMISSION · ' + secs(S.deadline) + 's · ' + rdy + '/' + al.length + ' READY'; turnTag = 'BREAK';
+      status = 'INTERMISSION' + cd(S.deadline) + ' · ' + rdy + '/' + al.length + ' READY'; turnTag = 'BREAK';
     } else if (S.phase === 'over') { status = 'MATCH OVER'; turnTag = 'END'; }
 
     var effects = [];
@@ -5806,7 +6432,7 @@ button.irow:disabled { opacity: 0.55; }
 
     return {
       phase: S.phase === 'inter' ? 'intermission' : S.phase,
-      round: S.round, match: 1, matches: 1, matchLabel: S.mode === 'duel' ? 'ONLINE 1V1' : 'ONLINE FFA',
+      round: S.round, match: 1, matches: 1, matchLabel: (C.local ? 'LOCAL ' : 'ONLINE ') + (S.mode === 'duel' ? '1V1' : 'FFA'),
       maxLives: M().maxLives, startingLives: M().startLives,
       lives: { player: spectating ? 0 : p.lives, opp: livesOpp },
       tokens: spectating ? 0 : p.tokens, effects: effects, inventory: inv, invMax: M().inventoryMax,
@@ -5830,7 +6456,7 @@ button.irow:disabled { opacity: 0.55; }
     var S = C.S;
     if (S.mode === 'duel') {
       var oi = duelOpp(), o = S.players[oi];
-      $('oppName').textContent = o.name + ' · ONLINE' + (o.left ? ' · LEFT' : '');
+      $('oppName').textContent = o.name + (C.local ? '' : ' · ONLINE') + (o.left ? ' · LEFT' : '');
       if (!alive(o)) UI.oppEliminated();
     } else {
       $('oppName').textContent = 'FREE FOR ALL · ' + aliveIdx(S).length + ' OF ' + S.players.length + ' STANDING';
@@ -5874,7 +6500,7 @@ button.irow:disabled { opacity: 0.55; }
         });
         return '<span class="ffa-hand' + (reveal && total(h) > 21 ? ' busted' : '') + '">' + inner + (reveal ? '<em>' + total(h) + '</em>' : '') + (q.hands.length > 1 ? '<sub>H' + (hi + 1) + '</sub>' : '') + '</span>';
       }).join('');
-      var st = !alive(q) ? (q.left ? 'LEFT' : 'OUT') : S.phase === 'play' ? (allBusted(q) ? 'BUST' : isDone(q) ? 'STOOD' : S.turn === j ? 'TURN · ' + secs(S.deadline) + 's' : '') : reveal ? '' : '';
+      var st = !alive(q) ? (q.left ? 'LEFT' : 'OUT') : S.phase === 'play' ? (allBusted(q) ? 'BUST' : isDone(q) ? 'STOOD' : S.turn === j ? 'TURN' + cd(S.deadline) : '') : reveal ? '' : '';
       if (S.phase === 'inter' && alive(q)) st = q.ready ? 'READY' : 'SHOPPING';
       var bn = mine && mine.intel.b && mine.intel.b.t === j ? '<span class="ffa-intel">BURNER: ' + mine.intel.b.r + ' 15' + (mine.intel.b.n !== cardCount(q) ? ' (STALE)' : '') + '</span>' : '';
       var flags = (S.fx.sh[j] ? ' <b class="red">⛓</b>' : '') + (S.fx.cl[j] ? ' <b class="red">CLAMPED</b>' : '') + (immune(S, j) ? ' <b class="amber">IMMUNE</b>' : '') + (q.doubled ? ' <b class="amber">×2</b>' : '');
@@ -5904,7 +6530,7 @@ button.irow:disabled { opacity: 0.55; }
     var S = C.S, me = C.myIdx;
     if (me < 0 || !alive(S.players[me])) { if (C.overlay) { UI.hideOverlay(); C.overlay = false; } return; }
     var p = S.players[me], r = S.res || { w: [], l: [], s: [], why: '' };
-    var sig = [S.round, p.tokens, p.inventory.length, p.bought, (p.shop || []).join('|'), p.ready ? 1 : 0].join(';');
+    var sig = [me, S.round, p.tokens, p.inventory.length, p.bought, (p.shop || []).join('|'), p.ready ? 1 : 0].join(';');
     if (sig === C.interSig && C.overlay) return;
     C.interSig = sig;
     var won = r.w.indexOf(me) >= 0, lostEntry = null;
@@ -5935,8 +6561,10 @@ button.irow:disabled { opacity: 0.55; }
      ====================================================================== */
   function active() { return C.stage === 'match' && !!C.S; }
 
+  function covered() { return C.local && C.curtainFor !== null; }
   function onAction(kind) {
     FX.unlockAudio();
+    if (covered()) return;
     var v = buildView();
     if (!v.myTurn) return;
     if (kind === 'item') { onInspect(null); return; }
@@ -5946,19 +6574,20 @@ button.irow:disabled { opacity: 0.55; }
   }
 
   function onPrimary() {
+    if (covered()) return;
     var S = C.S, me = C.myIdx;
     if (!S || me < 0) return;
     if (S.phase === 'inter' && !S.players[me].ready) sendAct({ t: 'ready' });
   }
 
   function onInspect(uid) {
-    if (!C.S || C.myIdx < 0) return;
+    if (!C.S || C.myIdx < 0 || covered()) return;
     UI.openInventory(myInventoryView(), function (u) { useFlow(u); }, uid);
   }
 
   function onBuy(i) {
     var S = C.S, me = C.myIdx;
-    if (!S || me < 0 || S.phase !== 'inter') return;
+    if (!S || me < 0 || S.phase !== 'inter' || covered()) return;
     var p = S.players[me];
     if (p.bought >= 1) { UI.flashStatus('ONE PURCHASE PER BREAK'); return; }
     if (p.tokens < M().shopPrice) { UI.flashStatus('NOT ENOUGH TOKENS'); FX.sfx('error'); return; }
@@ -5970,7 +6599,7 @@ button.irow:disabled { opacity: 0.55; }
   function onMenu() {
     UI.modal({
       title: 'MENU', cls: 'menu', dismiss: null,
-      html: '<p class="modal-text dim">Online match. Leaving counts as being eliminated' + (C.isHost ? ', and because you are hosting, it ends the match for everyone.' : '.') + '</p>',
+      html: '<p class="modal-text dim">' + (C.local ? 'Same-screen match. Leaving ends it for everyone at this table.' : 'Online match. Leaving counts as being eliminated' + (C.isHost ? ', and because you are hosting, it ends the match for everyone.' : '.')) + '</p>',
       buttons: [
         { label: 'RESUME', value: null, isDefault: true },
         { label: 'HOW TO PLAY', value: 'how' },
@@ -5980,13 +6609,14 @@ button.irow:disabled { opacity: 0.55; }
     }).then(function (v) {
       if (v === 'sound') { FX.setSound(!FX.settings.sound); onMenu(); }
       else if (v === 'how') UI.showInfo('how', function () { UI.showScreen(null); });
-      else if (v === 'leave') UI.confirm('LEAVE THE MATCH?', 'You will be eliminated from this table.', 'LEAVE').then(function (y) { if (y) leaveAll(true); });
+      else if (v === 'leave') UI.confirm('LEAVE THE MATCH?', C.local ? 'The match ends for everyone.' : 'You will be eliminated from this table.', 'LEAVE').then(function (y) { if (y) leaveAll(true); });
     });
   }
 
   function onKey(ev) {
     var k = (ev.key || '').toLowerCase();
     if (k === 'escape') { onMenu(); ev.preventDefault(); return; }
+    if (covered()) return;
     if (k === 'enter') { onPrimary(); return; }
     if (k === 'h') onAction('hit');
     else if (k === 's') onAction('stand');
@@ -6013,11 +6643,12 @@ button.irow:disabled { opacity: 0.55; }
       html = '<h2 class="mp-title">MULTIPLAYER</h2><p class="mp-sub blink">CONNECTING…</p>';
     } else if (C.stage === 'unavailable') {
       html = '<h2 class="mp-title">MULTIPLAYER</h2>' +
-        '<div class="mp-card mp-off"><h3>NOT AVAILABLE IN THIS COPY</h3>' +
-        '<p>Online matches run through the hosted House of 21 page on claude.ai. Open that page in Chrome while signed in to Claude, and make sure it has been shared with everyone you want to play.</p>' +
+        '<div class="mp-card mp-off"><h3>ONLINE NOT AVAILABLE IN THIS COPY</h3>' +
+        '<p>Online matches need the website version of House of 21.</p>' +
         '<p>This copy still plays the full single-player tournament offline.</p></div>' +
         '<div class="mp-actions"><button class="key" data-mp="back">BACK</button></div>';
     } else if (C.stage === 'menu') {
+      var off = C.online ? '' : ' disabled';
       html = '<h2 class="mp-title">MULTIPLAYER</h2>' + note +
         '<div class="mp-grid">' +
           '<section class="mp-card mp-you"><h3>YOU</h3>' +
@@ -6032,14 +6663,35 @@ button.irow:disabled { opacity: 0.55; }
             '<p class="mp-rules">' + (C.mode === 'duel'
               ? 'Head to head, one deck, 3 lives each. Lose the round, lose a life. Last one with lives wins.'
               : 'Four players, one deck, 3 lives each. Each round, anyone who busts loses a life, and so does the lowest hand. Last one standing wins.') + '</p>' +
-            '<h3>PLAY</h3>' +
-            '<button class="key key-primary mp-wide" data-mp="public">FIND PUBLIC MATCH</button>' +
-            '<button class="key mp-wide" data-mp="create">CREATE PRIVATE ROOM</button>' +
-            '<div class="mp-join"><label class="mp-label" for="mpCode">ROOM CODE</label><input id="mpCode" class="mp-input mp-code-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="K7Q2M"><button class="key" data-mp="join">JOIN</button></div>' +
+            '<h3>SAME SCREEN · NO INTERNET</h3>' +
+            '<button class="key' + (C.online ? '' : ' key-primary') + ' mp-wide" data-mp="local">PASS &amp; PLAY ON THIS DEVICE</button>' +
+            '<h3>ONLINE' + (C.online ? '' : C.via === 'net' ? ' · NOT CONNECTED' : ' · WEBSITE ONLY') + '</h3>' +
+            '<button class="key' + (C.online ? ' key-primary' : '') + ' mp-wide" data-mp="public"' + off + '>FIND PUBLIC MATCH</button>' +
+            '<button class="key mp-wide" data-mp="create"' + off + '>CREATE PRIVATE ROOM</button>' +
+            '<div class="mp-join"><label class="mp-label" for="mpCode">ROOM CODE</label><input id="mpCode" class="mp-input mp-code-input" maxlength="5" autocomplete="off" spellcheck="false" placeholder="K7Q2M"' + off + '><button class="key" data-mp="join"' + off + '>JOIN</button></div>' +
           '</section>' +
         '</div>' +
-        '<p class="mp-note">Only people this page is shared with can join, while signed in to Claude. Public matches pair you with anyone else searching here right now.</p>' +
+        '<p class="mp-note">' + onlineNote() + '</p>' +
         '<div class="mp-actions"><button class="key" data-mp="back">BACK</button></div>';
+    } else if (C.stage === 'local') {
+      var n = localCount();
+      var seatHtml = '';
+      for (var si = 0; si < n; si++) {
+        var st = C.seats[si];
+        seatHtml += '<li class="mp-seat mp-lseat"><span class="mp-lnum">P' + (si + 1) + '</span>' +
+          '<button class="key key-small" data-mp="sav-' + si + '-prev" aria-label="Previous look for player ' + (si + 1) + '">◀</button>' +
+          '<div class="mp-seat-face">' + avatarSVG(st.av) + '</div>' +
+          '<button class="key key-small" data-mp="sav-' + si + '-next" aria-label="Next look for player ' + (si + 1) + '">▶</button>' +
+          '<input id="mpSeat' + si + '" class="mp-input" data-seat="' + si + '" maxlength="12" autocomplete="off" spellcheck="false" aria-label="Player ' + (si + 1) + ' name" value="' + esc(st.name) + '"></li>';
+      }
+      html = '<h2 class="mp-title">PASS &amp; PLAY</h2>' + note +
+        '<p class="mp-sub">' + (C.mode === 'duel' ? '1V1' : '1V1V1V1') + ' · ONE DEVICE · NO INTERNET</p>' +
+        (C.mode === 'ffa' ? '<div class="mp-modes mp-count">' +
+          '<button class="key mp-mode' + (n === 3 ? ' on' : '') + '" data-mp="cnt-3" aria-pressed="' + (n === 3) + '">3 PLAYERS</button>' +
+          '<button class="key mp-mode' + (n === 4 ? ' on' : '') + '" data-mp="cnt-4" aria-pressed="' + (n === 4) + '">4 PLAYERS</button></div>' : '') +
+        '<ul class="mp-seats mp-lseats">' + seatHtml + '</ul>' +
+        '<p class="mp-note">Take turns on this screen. Between turns a cover hides everything until the next player taps, so nobody sees your cards or items. No turn timers.</p>' +
+        '<div class="mp-actions"><button class="key key-primary" data-mp="lstart">START MATCH ▸</button><button class="key" data-mp="lback">BACK</button></div>';
     } else if (C.stage === 'queue') {
       html = '<h2 class="mp-title">FINDING A ' + (C.mode === 'duel' ? '1V1' : '4-PLAYER') + ' MATCH</h2>' +
         '<p class="mp-sub blink" id="mpWaiting">1 / ' + need() + ' PLAYERS</p>' +
@@ -6070,13 +6722,48 @@ button.irow:disabled { opacity: 0.55; }
     var nameEl = $('mpName'), codeEl = $('mpCode');
     var keepName = nameEl ? nameEl.value : null, keepCode = codeEl ? codeEl.value : null;
     var focused = document.activeElement && document.activeElement.id;
-    if (body.getAttribute('data-stage') === C.stage && C.stage === 'menu' && body.getAttribute('data-sig') === C.mode + C.av + C.notice) return;
+    if (body.getAttribute('data-stage') === C.stage && C.stage === 'menu' && body.getAttribute('data-sig') === C.mode + C.av + C.notice + C.online + C.via) return;
     body.innerHTML = html;
     body.setAttribute('data-stage', C.stage);
-    body.setAttribute('data-sig', C.mode + C.av + C.notice);
+    body.setAttribute('data-sig', C.mode + C.av + C.notice + C.online + C.via);
     if (keepName !== null && $('mpName')) $('mpName').value = keepName;
     if (keepCode !== null && $('mpCode')) $('mpCode').value = keepCode;
     if (focused && $(focused)) $(focused).focus();
+  }
+
+  function onlineNote() {
+    if (C.online && C.via === 'net') return 'Online rooms run through public relays: anyone with your room code can join, and public matches pair you with anyone searching. Use a nickname, not your real name.';
+    if (C.online) return 'Pass &amp; play needs nothing but this screen. Online: only people this page is shared with can join, while signed in to Claude.';
+    if (C.via === 'net') return 'Could not reach the online relays (no internet, or this network blocks them). Pass &amp; play still works. <button class="key key-small" data-mp="retry">TRY AGAIN</button>';
+    return 'This copy runs from a file, so online rooms are switched off. Use the website for online play. Pass &amp; play works anywhere.';
+  }
+  function localCount() { return C.mode === 'duel' ? 2 : (C.seatCount === 3 ? 3 : 4); }
+  function ensureSeats() {
+    if (C.seats) return;
+    C.seats = [];
+    for (var i = 0; i < 4; i++) {
+      C.seats.push(i === 0 ? { name: C.name, av: C.av } : { name: 'PLAYER ' + (i + 1), av: (C.av + i * 3) % AVATARS.length });
+    }
+  }
+  function readSeats() {
+    for (var i = 0; i < 4; i++) {
+      var el = $('mpSeat' + i);
+      if (el && C.seats) C.seats[i].name = el.value;
+    }
+  }
+  function startLocal() {
+    readSeats();
+    var n = localCount();
+    var roster = [], used = {};
+    for (var i = 0; i < n; i++) {
+      var nm = cleanName(C.seats[i].name) || 'PLAYER ' + (i + 1);
+      if (used[nm]) nm = (nm.slice(0, 9) + ' ' + (i + 1)).trim();
+      used[nm] = 1;
+      roster.push({ peer: 'L' + i, name: nm, av: C.seats[i].av });
+    }
+    cleanupRooms(); resetMatchView();
+    C.kind = 'local'; C.local = true; C.isHost = true; C.viewer = -1; C.curtainFor = null;
+    hostCreate(null, C.mode, roster);
   }
 
   function lobbyList(cap) {
@@ -6111,6 +6798,19 @@ button.irow:disabled { opacity: 0.55; }
       if (a === 'av-next') { C.av = (C.av + 1) % AVATARS.length; saveProfile(); renderMulti(); return; }
       if (a === 'mode-duel') { C.mode = 'duel'; renderMulti(); return; }
       if (a === 'mode-ffa') { C.mode = 'ffa'; renderMulti(); return; }
+      if (a === 'local') { ensureSeats(); C.seats[0].name = C.name; C.seats[0].av = C.av; C.stage = 'local'; renderMulti(); return; }
+      if (a === 'lback') { readSeats(); C.stage = 'menu'; renderMulti(); return; }
+      if (a === 'cnt-3' || a === 'cnt-4') { readSeats(); C.seatCount = a === 'cnt-3' ? 3 : 4; renderMulti(); return; }
+      if (a.indexOf('sav-') === 0) {
+        readSeats();
+        var parts = a.split('-'), si = parseInt(parts[1], 10), st = C.seats[si];
+        st.av = (st.av + (parts[2] === 'next' ? 1 : AVATARS.length - 1)) % AVATARS.length;
+        if (si === 0) { C.av = st.av; saveProfile(); }
+        renderMulti(); return;
+      }
+      if (a === 'lstart') { startLocal(); return; }
+      if (a === 'retry') { openMulti(); return; }
+      if ((a === 'public' || a === 'create' || a === 'join') && !C.online) { C.notice = C.via === 'net' ? 'Not connected to the online relays. Try again, or use PASS & PLAY.' : 'Online rooms need the website version. Use PASS & PLAY here.'; renderMulti(); return; }
       if (a === 'public') { findPublic(); return; }
       if (a === 'create') { createPrivate(); return; }
       if (a === 'join') { joinPrivate(($('mpCode') || {}).value); return; }
@@ -6125,10 +6825,11 @@ button.irow:disabled { opacity: 0.55; }
     });
     scr.addEventListener('input', function (ev) {
       if (ev.target.id === 'mpName') { C.name = cleanName(ev.target.value) || C.name; saveProfile(); }
+      if (ev.target.id === 'mpSeat0') { var v0 = cleanName(ev.target.value); if (v0) { C.name = v0; saveProfile(); } }
       if (ev.target.id === 'mpCode') ev.target.value = ev.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
     });
     scr.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' && ev.target.id === 'mpCode') { readInputs(); joinPrivate(ev.target.value); }
+      if (ev.key === 'Enter' && ev.target.id === 'mpCode' && C.online) { readInputs(); joinPrivate(ev.target.value); }
     });
   }
   function readInputs() {
@@ -6148,6 +6849,7 @@ button.irow:disabled { opacity: 0.55; }
   function init(ui) {
     UI = ui;
     loadProfile();
+    buildCurtain();
     var btn = $('tMulti');
     if (btn) btn.addEventListener('click', function () { FX.sfx('click'); openMulti(); });
     bindMulti();
@@ -6167,7 +6869,7 @@ button.irow:disabled { opacity: 0.55; }
     // test hooks
     _t: {
       C: C, host: function () { return HOST; }, enc: enc, dec: dec, mpCanUse: mpCanUse,
-      view: function () { return C.S ? buildView() : null; }, sendAct: sendAct, wire: function () { return HOST ? wire() : null; }
+      view: function () { return C.S ? buildView() : null; }, reveal: revealForCurtain, startLocal: startLocal, ensureSeats: ensureSeats, sendAct: sendAct, wire: function () { return HOST ? wire() : null; }
     }
   };
 })(window.H21 = window.H21 || {});
