@@ -2,7 +2,7 @@
 
 A blackjack survival game that runs in the browser: beat three competitors with three lives each, using 22 items across five rarities.
 
-**Play it:** https://www.houseof21.com
+**Play it:** https://houseof21.casa
 
 **Offline copy:** download `house-of-21-standalone.html` and open it in Chrome. It runs single player and pass & play with no internet.
 
