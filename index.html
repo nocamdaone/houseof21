@@ -12,137 +12,129 @@
 
   <!-- =============================== THE ROOM =============================== -->
   <main id="room" class="room" aria-label="Game table">
-    <!-- Layer 1: basement background -->
-    <div id="layerBg" class="layer layer-bg" aria-hidden="true">
-      <div class="wall"></div>
-      <div class="pipe pipe-h p1"></div>
-      <div class="pipe pipe-h p2"></div>
-      <div class="pipe pipe-v p3"></div>
-      <div class="pipe pipe-v p4"></div>
-      <div class="jbox jb1"><span></span><span></span></div>
-      <div class="jbox jb2"><span></span></div>
-      <div class="bulb-cord"></div>
-      <div class="bulb"></div>
-      <div class="bulb-glow"></div>
-      <div class="floor"></div>
-    </div>
+    <div id="stage" class="stage">
 
-    <!-- Layer 2: monitor frames (each monitor's screen content is layer 3) -->
-    <div id="layerFrames" class="layer layer-frames">
-      <div class="console" id="console">
-
-        <!-- MONITOR 1 — PLAYER STATUS (top left) -->
-        <section class="monitor" id="mon1" aria-label="Player status">
-          <div class="bezel">
-            <div class="screen"><div class="screen-inner">
-              <header class="scr-head"><span>PLAYER STATUS</span><span class="led"></span></header>
-              <div class="scr-body" id="livesBody"></div>
-            </div><div class="scanlines"></div><div class="glare"></div></div>
-            <div class="bezel-tag">MON&#8209;01</div>
-          </div>
-        </section>
-
-        <!-- MONITOR 2 — INVENTORY (bottom left) -->
-        <section class="monitor" id="mon2" aria-label="Inventory">
-          <div class="bezel">
-            <div class="screen"><div class="screen-inner">
-              <header class="scr-head"><span>INVENTORY</span><span class="scr-sub" id="invCount">0/5</span></header>
-              <div class="scr-body" id="invBody"></div>
-            </div><div class="scanlines"></div><div class="glare"></div></div>
-            <div class="bezel-tag">MON&#8209;02</div>
-          </div>
-        </section>
-
-        <!-- CENTER STACK -->
-        <div class="center-stack">
-          <!-- MONITOR 5 — OPPONENT (main center) -->
-          <section class="monitor monitor-main" id="mon5" aria-label="Opponent">
-            <div class="bezel">
-              <div class="screen"><div class="screen-inner">
-                <header class="scr-head opp-head">
-                  <span id="oppName">—</span>
-                  <span class="opp-lives" id="oppLivesTop"></span>
-                </header>
-                <div class="scr-body opp-stage" id="oppStage">
-                  <div class="opp-face" id="oppFace"></div>
-                  <div class="opp-speech" id="oppSpeech" aria-live="polite"></div>
-                  <div class="opp-cards" id="oppCards"></div>
-                  <div class="m5-overlay" id="m5Overlay" hidden></div>
-                </div>
-              </div><div class="scanlines"></div><div class="glare"></div></div>
-              <div class="bezel-tag">MON&#8209;05 · LIVE FEED</div>
-            </div>
-          </section>
-
-          <!-- MONITOR 6 — OPPONENT LOG (small center) -->
-          <section class="monitor monitor-log" id="mon6" aria-label="Opponent log">
-            <div class="bezel">
-              <div class="screen"><div class="screen-inner">
-                <header class="scr-head"><span>OPPONENT LOG</span><span class="scr-sub" id="logStatus">STANDBY</span></header>
-                <div class="scr-body log-body">
-                  <ol class="log-list" id="logList" aria-live="polite"></ol>
-                  <div class="log-footer" id="logFooter"></div>
-                </div>
-              </div><div class="scanlines"></div><div class="glare"></div></div>
-              <div class="bezel-tag">MON&#8209;06</div>
-            </div>
-          </section>
-        </div>
-
-        <!-- MONITOR 3 — PLAYER HAND (top right) -->
-        <section class="monitor" id="mon3" aria-label="Your hand">
-          <div class="bezel">
-            <div class="screen"><div class="screen-inner">
-              <header class="scr-head"><span>YOUR HAND</span><span class="scr-sub" id="handTotalTop"></span></header>
-              <div class="scr-body" id="handBody"></div>
-            </div><div class="scanlines"></div><div class="glare"></div></div>
-            <div class="bezel-tag">MON&#8209;03</div>
-          </div>
-        </section>
-
-        <!-- MONITOR 4 — PLAYER ACTIONS (bottom right) -->
-        <section class="monitor" id="mon4" aria-label="Actions">
-          <div class="bezel">
-            <div class="screen"><div class="screen-inner">
-              <header class="scr-head"><span>ACTIONS</span><span class="scr-sub" id="turnTag">—</span></header>
-              <div class="scr-body actions-body">
-                <div class="act-status" id="actStatus">STANDBY</div>
-                <div class="act-grid">
-                  <button class="key" id="btnHit" data-act="hit" data-tip="HIT [H] — draw another card.">HIT</button>
-                  <button class="key" id="btnStand" data-act="stand" data-tip="STAND [S] — lock your current hand.">STAND</button>
-                  <button class="key" id="btnDouble" data-act="double" data-tip="DOUBLE DOWN [D] — draw exactly one card and stand. The round costs 2 lives either way. Only on your first two cards.">DOUBLE<br>DOWN</button>
-                  <button class="key" id="btnSplit" data-act="split" data-tip="SPLIT [P] — your first two cards share a value: play them as two hands. Your best hand counts.">SPLIT</button>
-                  <button class="key key-wide" id="btnItem" data-act="item" data-tip="USE ITEM [I] — open your inventory.">USE ITEM</button>
-                </div>
-                <button class="key key-primary" id="btnPrimary" hidden>DEAL</button>
-              </div>
-            </div><div class="scanlines"></div><div class="glare"></div></div>
-            <div class="bezel-tag">MON&#8209;04</div>
-          </div>
-        </section>
-
+      <!-- Layer 1: the basement wall, floor, props and the cables behind the TVs -->
+      <div id="layerBg" class="layer layer-bg" aria-hidden="true">
+        <img class="bg-img" src="assets/bg.webp" alt="">
+        <img class="prop prop-barrel" src="assets/barrel.webp" alt="">
+        <img class="prop prop-table" src="assets/table.webp" alt="">
+        <canvas id="wiresBack" class="wires" width="1366" height="768"></canvas>
       </div>
-    </div>
 
-    <!-- Layer 4: foreground cables and shadows -->
-    <div id="layerFg" class="layer layer-fg" aria-hidden="true">
-      <svg class="fg-cables" viewBox="0 0 1440 900" preserveAspectRatio="none">
-        <path d="M-20 820 C 160 760, 240 900, 420 930" fill="none" stroke="#050505" stroke-width="18" stroke-linecap="round"/>
-        <path d="M-20 860 C 120 820, 260 940, 360 960" fill="none" stroke="#0b0b0a" stroke-width="10" stroke-linecap="round"/>
-        <path d="M1460 780 C 1280 760, 1240 880, 1060 940" fill="none" stroke="#060606" stroke-width="16" stroke-linecap="round"/>
-        <path d="M1460 40 C 1360 30, 1340 -10, 1280 -30" fill="none" stroke="#070707" stroke-width="12" stroke-linecap="round"/>
-      </svg>
-      <div class="vignette"></div>
-      <div class="dread"></div>
-    </div>
+      <!-- Layer 2: the four televisions -->
+      <div id="layerFrames" class="layer layer-frames">
+        <img class="tv-img" id="tvImgL" src="assets/tv-l.webp" alt="" data-tv="l">
+        <img class="tv-img" id="tvImgR" src="assets/tv-r.webp" alt="" data-tv="r">
+        <img class="tv-img" id="tvImgB" src="assets/tv-b.webp" alt="" data-tv="b">
+        <img class="tv-img" id="tvImgM" src="assets/tv-m.webp" alt="" data-tv="m">
+      </div>
 
-    <div class="banner" id="banner" aria-live="polite"></div>
+      <!-- The dark outside the bulb's light (moves with the bulb) -->
+      <div class="darkness-wrap" aria-hidden="true"><div id="darkness" class="darkness"></div><div id="blackout" class="blackout"></div></div>
+
+      <!-- Layer 3: what is on the screens (self-lit, so above the dark) -->
+      <div id="layerScreens" class="layer layer-screens">
+
+        <!-- LEFT TV — INVENTORY -->
+        <section class="scr" id="scrL" data-tv="l" aria-label="Inventory">
+          <div class="scr-content" id="mon2">
+            <header class="scr-head"><span>items</span><span class="scr-sub" id="invCount">0/5</span></header>
+            <div class="scr-body" id="invBody"></div>
+          </div>
+          <div class="scr-glass"></div>
+        </section>
+
+        <!-- MIDDLE TV — THE OPPONENT -->
+        <section class="scr" id="scrM" data-tv="m" aria-label="Opponent">
+          <div class="scr-content" id="mon5">
+            <header class="scr-head opp-head">
+              <span id="oppName">—</span>
+              <span class="opp-lives" id="oppLivesTop"></span>
+            </header>
+            <canvas class="ecg ecg-opp" id="ecgOpp" width="320" height="34" aria-hidden="true"></canvas>
+            <div class="scr-body opp-stage" id="oppStage">
+              <div class="opp-face" id="oppFace"></div>
+              <div class="opp-speech" id="oppSpeech" aria-live="polite"></div>
+              <div class="opp-cards" id="oppCards"></div>
+              <div class="death-layer" id="deathLayer" aria-hidden="true"></div>
+            </div>
+          </div>
+          <div class="scr-glass"></div>
+        </section>
+
+        <!-- BOTTOM TV — YOUR HAND + YOUR HEART -->
+        <section class="scr" id="scrB" data-tv="b" aria-label="Your hand">
+          <div class="scr-content" id="mon3">
+            <header class="scr-head"><span>your hand</span><span class="scr-sub" id="handTotalTop"></span></header>
+            <div class="hand-row">
+              <div class="scr-body" id="handBody"></div>
+              <div class="me-col" id="mon1">
+                <canvas class="ecg ecg-me" id="ecgMe" width="120" height="44" aria-hidden="true"></canvas>
+                <div class="me-stats" id="livesBody"></div>
+              </div>
+            </div>
+          </div>
+          <div class="scr-glass"></div>
+        </section>
+
+        <!-- RIGHT TV — TERMINAL: ACTIONS + LOG -->
+        <section class="scr" id="scrR" data-tv="r" aria-label="Actions and log">
+          <div class="scr-content term" id="mon4">
+            <header class="scr-head"><span>root@house21:~$</span><span class="scr-sub" id="turnTag">—</span></header>
+            <div class="act-status" id="actStatus">standby</div>
+            <div class="act-grid" role="group" aria-label="Actions">
+              <button class="key cmd" id="btnHit" data-act="hit" data-tip="hit [h] — draw another card.">hit <i>[h]</i></button>
+              <button class="key cmd" id="btnStand" data-act="stand" data-tip="stand [s] — lock your current hand.">stand <i>[s]</i></button>
+              <button class="key cmd" id="btnDouble" data-act="double" data-tip="double down [d] — draw exactly one card and stand. the round costs 2 lives either way. only on your first two cards.">double <i>[d]</i></button>
+              <button class="key cmd" id="btnSplit" data-act="split" data-tip="split [p] — your first two cards share a value: play them as two hands. your best hand counts.">split <i>[p]</i></button>
+              <button class="key cmd" id="btnItem" data-act="item" data-tip="use item [i] — open your inventory.">use_item <i>[i]</i></button>
+            </div>
+            <button class="key key-primary cmd" id="btnPrimary" hidden>deal</button>
+            <div class="log-wrap" id="mon6">
+              <div class="log-head"><span>/var/log/table</span><span id="logStatus">standby</span></div>
+              <ol class="log-list" id="logList" aria-live="polite"></ol>
+              <div class="log-footer" id="logFooter"></div>
+            </div>
+          </div>
+          <div class="scr-glass"></div>
+        </section>
+      </div>
+
+      <!-- The bulb (swings, flickers, lights the middle) -->
+      <div id="bulbRig" class="bulb-rig" aria-hidden="true">
+        <div class="bulb-cord"></div>
+        <div class="beam" id="beam"></div>
+        <img class="bulb-img" id="bulbImg" src="assets/bulb.webp" alt="">
+        <div class="bulb-glow" id="bulbGlow"></div>
+      </div>
+
+      <!-- Layer 4: foreground cables, vignette -->
+      <div id="layerFg" class="layer layer-fg" aria-hidden="true">
+        <canvas id="wiresFront" class="wires" width="1366" height="768"></canvas>
+      </div>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="dread" aria-hidden="true"></div>
+      <div class="splatter" id="splatter" aria-hidden="true"></div>
+      <div class="banner" id="banner" aria-live="polite"></div>
+    </div>
+    <div class="grain" aria-hidden="true"></div>
   </main>
+
+  <!-- Close-up view of one TV -->
+  <div class="zoom" id="zoom" hidden role="dialog" aria-modal="true" aria-label="Close-up">
+    <div class="zoom-backdrop" id="zoomBack"></div>
+    <div class="zoom-tv">
+      <div class="zoom-screen" id="zoomScreen"></div>
+      <div class="zoom-glass"></div>
+      <button class="zoom-close key key-small" id="zoomClose" aria-label="Close close-up">back [esc]</button>
+    </div>
+  </div>
 
   <!-- ============================ FULL SCREENS ============================ -->
   <section class="screen-full" id="scrTitle" aria-label="Title">
     <div class="title-wrap">
-      <div class="title-kicker">AN UNDERGROUND TOURNAMENT · 3 COMPETITORS · 3 LIVES</div>
+      <div class="title-kicker">an underground tournament · 3 competitors · 3 lives</div>
       <h1 class="title-logo">HOUSE<span>OF</span>21</h1>
       <div class="title-menu">
         <button class="key key-menu" id="tContinue" hidden>CONTINUE</button>
@@ -155,7 +147,7 @@
         <button class="key key-small" id="tSound">SOUND: ON</button>
         <button class="key key-small" id="tFx">EFFECTS: FULL</button>
       </div>
-      <p class="title-note">Fictional tokens only. No real money. Works offline.</p>
+      <p class="title-note">Fictional tokens only. No real money. Contains cartoon gore.</p>
     </div>
   </section>
 
@@ -201,11 +193,25 @@
   <!-- Menu button (in-game) -->
   <button class="menu-btn" id="menuBtn" hidden aria-label="Menu" data-tip="MENU [Esc]">≡</button>
 
+  <!-- Intermission / dossier panel (a large CRT over the room) -->
+  <div class="m5-overlay" id="m5Overlay" hidden></div>
+
   <div class="modal-root" id="modalRoot" hidden></div>
   <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
   <canvas id="staticCanvas" class="static-canvas" aria-hidden="true"></canvas>
 </div>
 
+<!-- The fisheye: a displacement map that bends each screen like curved glass -->
+<svg class="svg-defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="fisheye" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+      <feImage id="fishMap" result="map" x="0" y="0" width="100%" height="100%" preserveAspectRatio="none"/>
+      <feDisplacementMap in="SourceGraphic" in2="map" id="fishDisp" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<script src="assets/art.js"></script>
 <script src="config.js"></script>
 <script src="cards.js"></script>
 <script src="items.js"></script>
@@ -213,6 +219,8 @@
 <script src="story.js"></script>
 <script src="face.js"></script>
 <script src="fx.js"></script>
+<script src="scene.js"></script>
+<script src="death.js"></script>
 <script src="ui.js"></script>
 <script src="net.js"></script>
 <script src="mp.js"></script>

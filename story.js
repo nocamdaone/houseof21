@@ -11,7 +11,7 @@
       { who: 'narrator', tag: 'II. THE ADVERTISEMENT', text: '3:12 A.M. Between two job listings, a banner glows. EASY SIGN-UP. INSTANT PAYOUTS. THE HOUSE ALWAYS PAYS YOU.' },
       { who: 'narrator', tag: 'III. INSTALLATION', glitch: true, text: 'You click. A progress bar opens that you never asked for. INSTALLING: CONDUCTOR.EXE. You pull the power cable. The bar keeps filling.' },
       { who: 'narrator', tag: 'IV. THE KNOCK', text: 'Later that night there is a knock you do not remember answering. A sweet chemical smell. The floor tilts away from you. Then nothing.' },
-      { who: 'narrator', tag: 'V. THE CELLAR', text: 'You wake to the hum of transformers. Wet concrete. Pipes sweating in the dark. Six old monitors stare at you from a steel console.' },
+      { who: 'narrator', tag: 'V. THE CELLAR', text: 'You wake to the buzz of a single bulb. Wet concrete. Something dripping in the dark. Four old televisions stare at you, and a heart monitor beeps in time with your pulse.' },
       { who: 'conductor', tag: 'VI. THE CONDUCTOR', glitch: true, text: 'Ah. You are awake. Welcome to the House. You may call me the Conductor. Everyone does, eventually.' },
       { who: 'conductor', tag: 'VII. THE RULES', text: 'The game is twenty-one. Three lives each. Win a hand and your opponent loses a life. Lose one and you do. Three competitors stand between you and the door. Lose every life... and the House keeps you.' }
     ],
@@ -56,12 +56,13 @@
     howTo: [
       ['THE GOAL', 'Beat three competitors in a row. Each match, both of you start with 3 lives. Win a round and they lose a life; lose one and you do. A draw costs nobody. Hit zero and your tournament is over.'],
       ['BLACKJACK', 'Get closer to 21 than your opponent without going over. 2-10 count face value, J/Q/K count 10, Aces count 11 or 1. Over 21 is a bust and you lose the round at once. A natural 21 on your first two cards wins immediately (two naturals is a draw).'],
-      ['HIDDEN HANDS', 'You always see your own cards. Their cards stay face-down until the round ends. Watch the log under their monitor for what they do, and watch their face, but they bluff.'],
+      ['HEART MONITORS', 'Lives are heartbeats. Yours is on the bottom TV, theirs on the middle one. Every life lost makes the heart beat faster. A flat line means it is over, and how it ends depends on who is in the chair.'],
+      ['HIDDEN HANDS', 'You always see your own cards. Their cards stay face-down until the round ends. Watch the terminal on the right for what they do, and watch their face on the middle TV, but they bluff. Click any TV to see it up close.'],
       ['ACTIONS', 'HIT draws a card. STAND locks your hand. DOUBLE DOWN draws exactly one card, stands, and makes the round cost 2 lives. SPLIT turns a pair into two hands; your best hand counts. Turns alternate; once one side stands the other keeps playing until done.'],
       ['THE COMPETITORS', 'Each run draws three of fourteen competitors, easier ones first. Every one has a quirk, shown on their file before the match: one never reacts, one steals, one plays two hands. Some say the Conductor himself takes a seat, about once in a million games.'],
       ['ITEMS', 'You get 3 random items each match and can carry up to 5. Each item has a rarity: COMMON (white), UNCOMMON (grey), RARE (light red), VERY RARE (dark red) and CONTRABAND (black). Rarer items turn up less often and hit harder. Click an item to read it and use it. Items that cost your action use up your turn. When you bust, REWIND, GAS CANISTER or GUILLOTINE can save you.'],
       ['TOKENS', 'Each round you win earns 1 token. Between rounds the shop offers 3 items at 2 tokens each, one purchase per break. Tokens are pretend; nothing here involves real money.'],
-      ['CONTROLS', 'Mouse, touchpad or touchscreen. Keys: H hit, S stand, D double, P split, I use item, 1-5 inspect items, Enter continue / deal, Esc menu. The game saves between rounds; CONTINUE on the title screen resumes.']
+      ['CONTROLS', 'Mouse, touchpad or touchscreen. Click a TV to open it up close (Esc to step back). Keys: H hit, S stand, D double, P split, I use item, 1-5 inspect items, Enter continue / deal, Esc menu. The game saves between rounds; CONTINUE on the title screen resumes.']
     ],
 
     credits: [

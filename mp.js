@@ -39,17 +39,8 @@
   var CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   var STORE_KEY = 'house21.mp.v1';
 
-  /* Player avatars: generic placeholder looks (swap for real art later). */
-  var AVATARS = [
-    { head: 'round', skin: '#c9ad97', hair: 'short', hairColor: '#3b2c22', shirt: '#4b5249', collar: 'tee' },
-    { head: 'small', skin: '#d4b8a2', hair: 'bob', hairColor: '#7a4d2c', shirt: '#5c4a5a', collar: 'open' },
-    { head: 'narrow', skin: '#9c7a5f', hair: 'buzz', hairColor: '#1c1714', shirt: '#3e4a5a', collar: 'polo' },
-    { head: 'small', skin: '#a77c5f', hair: 'long', hairColor: '#2a1d16', shirt: '#4a3c4a', collar: 'tee' },
-    { head: 'long', skin: '#bfae99', hair: 'slick', hairColor: '#4a3a2c', shirt: '#2f3a34', collar: 'open', extras: ['glasses'] },
-    { head: 'round', skin: '#e0c8b4', hair: 'braids', hairColor: '#a8713c', shirt: '#6a4a3a', collar: 'peter' },
-    { head: 'wide', skin: '#8a6a52', hair: 'none', browColor: '#2a221c', shirt: '#4a4a3a', collar: 'tee', extras: ['stubble'] },
-    { head: 'small', skin: '#cfb7a4', hair: 'shaggy', hairColor: '#5a5048', shirt: '#38424a', collar: 'none', hood: '#38424a', extras: ['hood'] }
-  ];
+  /* Player looks: the cut-out characters. */
+  var AVATARS = [{ art: 'dennis' }, { art: 'bryan' }, { art: 'jack' }];
 
   /* ======================================================================
      1. CARD CODEC (compact text so the table fits in presence)
@@ -1377,7 +1368,7 @@
   }
   function oppDef(i) {
     var p = C.S.players[i];
-    return { id: 'mp-' + C.S.id + '-' + i, name: p.name, alias: C.local ? 'SAME SCREEN' : 'ONLINE', personality: 'Human', look: AVATARS[p.av] || AVATARS[0], traits: {}, lines: {}, dossier: '', traitText: '' };
+    return { id: 'mp-' + C.S.id + '-' + i, name: p.name, alias: C.local ? 'SAME SCREEN' : 'ONLINE', personality: 'Human', art: (AVATARS[p.av] || AVATARS[0]).art, look: AVATARS[p.av] || AVATARS[0], traits: {}, lines: {}, dossier: '', traitText: '' };
   }
 
   function phaseEffects() {
@@ -1419,9 +1410,18 @@
     FX.staticBurst(900, 0.45);
     var won = S.winner === me && me >= 0;
     var title = S.winner === null ? 'DRAW' : (won ? 'VICTORY' : 'DEFEAT');
+    // 1v1: the loser dies on screen first.
+    var dying = Promise.resolve();
+    if (S.mode === 'duel' && S.winner !== null && me >= 0) {
+      var o = duelOpp();
+      if (S.winner === me && o !== null && o !== undefined) dying = UI.playDeath(oppDef(o));
+      else if (S.winner !== me) dying = UI.playerDeath();
+    } else {
+      dying = new Promise(function (r) { setTimeout(r, 1400); });
+    }
     if (C.local) {
       hideCurtain(); C.curtainFor = null;
-      setTimeout(function () {
+      dying.then(function () {
         UI.showResult({
           kicker: 'SAME SCREEN · ' + (S.mode === 'duel' ? '1V1' : S.players.length + ' PLAYERS') + ' · ' + S.round + ' ROUNDS',
           title: S.winner === null ? 'DRAW' : S.players[S.winner].name + ' WINS',
@@ -1432,13 +1432,13 @@
           if (w === 2) { C.stage = 'menu'; UI.showScreen('title'); return; }
           C.stage = 'local'; UI.showScreen('multi'); renderMulti();
         });
-      }, 1400);
+      });
       return;
     }
     var sub = S.winner === null ? 'Nobody walked away from this table.'
       : won ? (S.mode === 'duel' ? 'You took every one of their lives.' : 'Last one standing out of ' + S.players.length + '.')
         : (S.players[S.winner].name + ' outlasted you.');
-    setTimeout(function () {
+    dying.then(function () {
       UI.showResult({
         kicker: 'ONLINE · ' + (S.mode === 'duel' ? '1V1' : 'FREE FOR ALL') + ' · ' + S.round + ' ROUNDS',
         title: title, sub: sub, portrait: 'conductor',
@@ -1460,7 +1460,7 @@
           UI.showScreen('multi');
         }
       });
-    }, 1400);
+    });
   }
 
   /* ---- sending actions ---- */
@@ -1794,7 +1794,7 @@
         d.className = 'ffa-cell';
         d.innerHTML = '<div class="ffa-face">' + Face.build(AVATARS[q.av] || AVATARS[0]) + '</div><div class="ffa-info"></div>';
         grid.appendChild(d);
-        cell = C.ffaCells[q.peer] = { el: d, svg: d.querySelector('svg'), info: d.querySelector('.ffa-info'), expr: '' };
+        cell = C.ffaCells[q.peer] = { el: d, svg: d.querySelector('.cut'), info: d.querySelector('.ffa-info'), expr: '' };
       }
       var xr = mine && mine.intel.x && mine.intel.x.t === j && hostTime(mine.intel.x.u) > now() ? decList(mine.intel.x.c) : null;
       var cards = q.hands.map(function (h, hi) {
@@ -2050,7 +2050,7 @@
     if (C.seats) return;
     C.seats = [];
     for (var i = 0; i < 4; i++) {
-      C.seats.push(i === 0 ? { name: C.name, av: C.av } : { name: 'PLAYER ' + (i + 1), av: (C.av + i * 3) % AVATARS.length });
+      C.seats.push(i === 0 ? { name: C.name, av: C.av } : { name: 'PLAYER ' + (i + 1), av: (C.av + i) % AVATARS.length });
     }
   }
   function readSeats() {

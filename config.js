@@ -68,10 +68,12 @@
 
     // ---- Competitors -----------------------------------------------------
     // One competitor per match is drawn from each tier (easier first).
+    // Only Dennis, Bryan and Jack have art so far. The other competitors'
+    // rules are still in opponents.js, ready for when their cut-outs exist.
     lineupTiers: [
-      ['betty', 'bob', 'dennis', 'cassie', 'mark'],
-      ['bryan', 'elaine', 'chuck', 'luisa', 'phil'],
-      ['jack', 'sandra', 'hugo', 'twins']
+      ['dennis'],
+      ['bryan'],
+      ['jack']
     ],
     conductorChance: 0.000001,   // per match: one in a million
     sandraStealChance: 0.3,      // per Sandra turn, at most once per round

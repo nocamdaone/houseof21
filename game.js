@@ -48,7 +48,7 @@
       player: newSide(), opp: newSide(),
       deck: [], discardPile: [], turn: null, firstTurn: 'player',
       fx: newFx(), tourniquetNext: { player: false, opp: false },
-      log: [], actions: 0, lastResult: null, oppDefId: Opp.LIST[0].id,
+      log: [], actions: 0, lastResult: null, oppDefId: CONFIG.lineupTiers[0][0],
       serial: 0, result: null, stats: { won: 0, lost: 0, drawn: 0 },
       lineup: buildLineup(), fluShot: { player: 0, opp: 0 }, beatConductor: false
     };
@@ -1006,10 +1006,8 @@
     G.defeatedCount = G.matchIndex + 1;
     if (def().id === 'conductor') G.beatConductor = true;
     reactOpp('eliminated');
-    FX.staticBurst(900, 0.5);
-    UI.oppEliminated();
     render();
-    sleep(1600).then(function () {
+    UI.playDeath(def()).then(function () {
       if (stale(ep)) return;
       var last = G.matchIndex >= CONFIG.matches - 1;
       if (last) { tournamentWon(); return; }
@@ -1032,9 +1030,8 @@
     G.result = 'lose';
     clearSave();
     reactOpp('oppWin');
-    FX.staticBurst(1200, 0.6);
     render();
-    sleep(1600).then(function () {
+    UI.playerDeath().then(function () {
       if (stale(ep)) return;
       UI.showResult({
         kicker: 'TOURNAMENT OVER · DEFEATED IN MATCH ' + pad(G.matchIndex + 1),

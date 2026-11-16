@@ -44,22 +44,28 @@ accessibility settings.
 
 CONTROLS
 --------
-Mouse, touchpad or touchscreen.
+Mouse, touchpad or touchscreen. The cursor is a hand that closes into a
+fist while you click. Click any TV to open it up close; Esc steps back.
   H hit · S stand · D double down · P split · I use item
   1-5 inspect inventory slot · Enter deal / continue · Esc menu
 
 
 FILES
 -----
-  index.html     page structure: the six monitors and screens
-  style.css      look, layout, CRT effects, responsive stacking
+  index.html     page structure: the room, four TVs and their screens
+  style.css      look: black/white/red, terminal, cut-outs, deaths
+  assets/        the art (cut-outs, TVs, bulb, props), font, generated
+                 blood/rope/hood, and art.js (where every piece sits)
   config.js      every tunable rule (lives, prices, penalties, timings)
   cards.js       deck, shuffling, blackjack hand maths
   items.js       the 22 items with rarities (each: canUse + apply)
   opponents.js   the 15 competitors (data, quirks, dialogue, AI)
   story.js       all narrative text and Conductor lines
-  face.js        placeholder SVG portraits (swap for real art here)
-  fx.js          parallax, static, glitches, procedural sound
+  face.js        cut-out characters: body + eye and nose pieces, blinks
+  fx.js          static, glitches, procedural basement sound
+  scene.js       the room: TVs, swinging bulb + light, parallax, cables,
+                 heart monitors, fisheye screens, close-up view, cursor
+  death.js       how each competitor dies, and how you do
   ui.js          renders the monitors, dialogs and screens
   net.js         online rooms for the website (public Nostr relays)
   mp.js          multiplayer: matchmaking, rooms, pass & play, shared table
@@ -132,16 +138,27 @@ is a separate thing.)
 
 COMPETITORS
 -----------
-Each run draws one competitor per match, easiest tier first
-(config.js lineupTiers):
-  Tier 1  Betty, Bob, Dennis, Cassie, Mark
-  Tier 2  Bryan, Elaine, Chuck, Luisa, Phil
-  Tier 3  Jack, Sandra, Hugo, Fuchsia & Trish
-The Conductor replaces the drawn competitor with a 1 in 1,000,000 chance
-per match (config.js conductorChance). To test him, open the game with
-#conductor at the end of the address (index.html#conductor).
-Mark has a generic "tech founder" placeholder look rather than a real
-person's likeness.
+Only the three competitors with art are in the tournament for now:
+  Match 1  Dennis, The Insomniac   (dies by lethal injection)
+  Match 2  Bryan, The High Roller  (dies by the rope)
+  Match 3  Jack, The Liar          (crushed by a barrel)
+The Conductor, a hooded figure with no face, replaces the competitor with
+a 1 in 1,000,000 chance per match (config.js conductorChance). To meet
+him, open the game with #conductor at the end of the address.
+The other twelve competitors' rules are still in opponents.js and come
+back by adding them to config.js lineupTiers once they have cut-outs.
+Deaths for Cassie (split in half), Elaine (scalped) and Delilah (shot)
+are already built in death.js, waiting for their art.
+
+ADDING A CHARACTER
+------------------
+Make a faceless body cut-out (a PNG with a transparent background, like
+the ones for Jack, Dennis and Bryan). It can reuse the existing eye and
+nose pieces or come with its own (open, closed and glancing eyes; a
+normal and a flared nose). The pieces are placed on the body, cropped
+and compressed into assets/, and their positions written to
+assets/art.js. Then the competitor gets art: '<id>' in opponents.js
+and a slot in lineupTiers in config.js.
 
 RULE DECISIONS MADE FOR THE PROTOTYPE
 -------------------------------------

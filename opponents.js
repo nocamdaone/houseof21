@@ -77,7 +77,8 @@
     },
     {
       id: 'dennis', name: 'DENNIS', alias: 'THE INSOMNIAC', tier: 1, personality: 'Absent',
-      dossier: 'Has not slept in four days. The hood has not come down once. Nobody has heard him speak.',
+      art: 'dennis', deathText: 'lethal injection.',
+      dossier: 'Has not slept in four days. Stares at the wall between hands. Nobody has heard him speak.',
       traitText: 'Shows no reaction to anything. His face tells you nothing.',
       look: { head: 'narrow', skin: '#a39a89', hair: 'messy', hairColor: '#2a2724', shirt: '#363b37', hood: '#363b37', collar: 'none', extras: ['hood', 'bags', 'stubble'] },
       traits: { stoneFace: true },
@@ -123,6 +124,7 @@
     /* ---------------------------- TIER 2 ------------------------------- */
     {
       id: 'bryan', name: 'BRYAN', alias: 'THE HIGH ROLLER', tier: 2, personality: 'Compulsive gambler',
+      art: 'bryan', deathText: 'the rope.',
       dossier: 'Lost a house, a boat and a marriage on one long weekend. Calls it a "learning streak."',
       traitText: 'Only carries chance items: coins, dolls, sealed cards, boxes.',
       look: { head: 'wide', skin: '#b39a86', hair: 'none', browColor: '#5a4a3e', shirt: '#4a3e35', collar: 'open', extras: ['shine', 'doublechin', 'stubble'] },
@@ -214,7 +216,8 @@
     /* ---------------------------- TIER 3 ------------------------------- */
     {
       id: 'jack', name: 'JACK', alias: 'THE LIAR', tier: 3, personality: 'Deceptive',
-      dossier: 'Six foot five and built like a coat hanger. Has a different story about why he is here every time you ask.',
+      art: 'jack', deathText: 'crushed.',
+      dossier: 'Built like a vending machine and twice as cold. Has a different story about why he is here every time you ask.',
       traitText: 'His face lies on purpose. Read it backwards, mostly.',
       look: { head: 'long', skin: '#b2a493', hair: 'slick', hairColor: '#2b2420', shirt: '#33302c', collar: 'none', extras: ['stubble'], neck: 'long' },
       traits: {},
@@ -287,6 +290,7 @@
       traitText: 'Five lives. Sees your real total. Only carries Rare items or better.',
       lives: 5,
       special: true,
+      art: 'conductor', deathText: 'nobody knows.',
       look: { head: 'narrow', skin: '#141513', hair: 'none', shirt: '#070807', collar: 'conductor', eyeWhite: '#23241e', pupil: '#e6d6a6', mouthColor: '#4a4636', browColor: '#050505', extras: ['cap'] },
       traits: { allSeeing: true },
       items: { tiers: ['rare', 'veryrare', 'contraband'] },

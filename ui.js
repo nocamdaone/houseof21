@@ -6,7 +6,7 @@
 (function (H) {
   'use strict';
 
-  var Cards = H.Cards, Items = H.Items, ITEMS = H.Items.ITEMS, FX = H.FX, Face = H.Face, Story = H.Story;
+  var Cards = H.Cards, Items = H.Items, ITEMS = H.Items.ITEMS, FX = H.FX, Face = H.Face, Story = H.Story, Scene = H.Scene, Death = H.Death;
   var $ = function (id) { return document.getElementById(id); };
   var el = {};
   var handlers = {};
@@ -21,17 +21,9 @@
   }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
-  var HEART = '<svg class="heart" viewBox="0 0 24 22" aria-hidden="true"><path d="M12 21 L2.6 11.6 A5.6 5.6 0 0 1 12 3.8 A5.6 5.6 0 0 1 21.4 11.6 Z"/></svg>';
-  function heartsHTML(n, slots, cls) {
-    var out = '';
-    for (var i = 0; i < slots; i++) out += '<span class="life ' + (i < n ? 'on' : 'off') + ' ' + (cls || '') + '" data-i="' + i + '">' + HEART + '</span>';
-    return out;
-  }
-  function textHearts(n) {
-    var s = '';
-    for (var i = 0; i < n; i++) s += '♥ ';
-    return s.trim() || '—';
-  }
+  function textHearts(n) { return n > 0 ? String(n) : 'flatline'; }
+  function lookOf(def) { return def ? (def.art ? { art: def.art } : def.look) : null; }
+  function cutOf(node) { return node ? node.querySelector('.cut') : null; }
 
   /* ======================================================================
      RARITY
@@ -88,28 +80,19 @@
 
   function renderLives(v) {
     var n = v.lives.player;
-    var slots = Math.max(v.startingLives, n);
-    var dropped = lastLives.player !== null && n < lastLives.player;
-    var html = '<div class="lives-row" aria-label="Lives ' + n + '">' + heartsHTML(n, slots) + '</div>' +
-      '<dl class="stat-grid">' +
-        '<dt>LIVES</dt><dd>' + n + ' / ' + v.startingLives + (n > v.startingLives ? ' +' + (n - v.startingLives) : '') + '</dd>' +
-        '<dt>ROUND</dt><dd>' + pad(Math.max(v.round, 0)) + '</dd>' +
-        '<dt>MATCH</dt><dd>' + (v.matchLabel || (pad(v.match) + ' / ' + pad(v.matches))) + '</dd>' +
-        '<dt>TOKENS</dt><dd class="amber">◆ ' + v.tokens + '</dd>' +
-      '</dl>';
+    var max = Math.max(v.startingLives, n);
+    if (Scene) Scene.setLives('player', n, max);
+    if (Scene) Scene.setDread(v.dread);
+    var html = '<div><span class="lv">' + (n > 0 ? n + ' ' + (n === 1 ? 'life' : 'lives') : 'flatline') + '</span></div>' +
+      '<div>round <b>' + pad(Math.max(v.round, 0)) + '</b></div>' +
+      '<div>match <b>' + esc(String(v.matchLabel || (pad(v.match) + '/' + pad(v.matches))).toLowerCase()) + '</b></div>' +
+      '<div>tokens <b>' + v.tokens + '</b></div>';
     if (v.effects.length) {
       html += '<ul class="effects">' + v.effects.map(function (e) { return '<li class="fx-' + e.k + '">' + esc(e.t) + '</li>'; }).join('') + '</ul>';
-    } else if (n <= 1) {
-      html += '<p class="warn-line">WARNING: ONE LIFE REMAINING</p>';
+    } else if (n === 1) {
+      html += '<p class="warn-line">one life left</p>';
     }
     el.livesBody.innerHTML = html;
-    if (dropped) {
-      var lost = el.livesBody.querySelectorAll('.life.off');
-      for (var i = 0; i < lost.length; i++) {
-        var idx = parseInt(lost[i].getAttribute('data-i'), 10);
-        if (idx >= n && idx < lastLives.player) lost[i].classList.add('just-off');
-      }
-    }
     lastLives.player = n;
   }
 
@@ -122,14 +105,14 @@
         var rk = rarityKey(it.item);
         html += '<button class="slot r-' + rk + (it.usable ? ' usable' : '') + '" data-uid="' + it.uid + '" ' +
           'data-tip="' + esc(it.item.name + ' (' + H.CONFIG.rarities[rk].name + ') — ' + it.item.desc + (it.usable ? ' [USABLE NOW]' : ' [' + it.reason + ']')) + '" aria-label="' + esc(it.item.name + ', ' + H.CONFIG.rarities[rk].name) + '">' +
-          '<span class="slot-key">' + (i + 1) + '</span>' + it.item.icon +
+          '<span class="slot-key">' + (i + 1) + '</span>' +
           '<span class="slot-name">' + esc(it.item.name) + '</span><span class="slot-rar">' + H.CONFIG.rarities[rk].name + '</span></button>';
       } else {
-        html += '<div class="slot empty" aria-hidden="true"><span class="slot-key">' + (i + 1) + '</span><span class="slot-name">EMPTY</span></div>';
+        html += '<div class="slot empty" aria-hidden="true"><span class="slot-key">' + (i + 1) + '</span><span class="slot-name">empty</span></div>';
       }
     }
     var usableCount = v.inventory.filter(function (x) { return x.usable; }).length;
-    html += '<div class="inv-hint">' + (v.inventory.length ? (usableCount ? usableCount + ' USABLE NOW<br>CLICK TO INSPECT' : 'CLICK AN ITEM<br>TO INSPECT') : 'NO ITEMS<br>WIN ROUNDS FOR TOKENS') + '</div>';
+    html += '<div class="inv-hint">' + (v.inventory.length ? (usableCount ? usableCount + ' usable now' : 'click an item to inspect') : 'no items · win rounds for tokens') + '</div>';
     html += '</div>';
     el.invBody.innerHTML = html;
   }
@@ -186,11 +169,12 @@
     var o = v.opp;
     el.oppName.textContent = o.def.name + ' · ' + o.def.alias;
     var dropped = lastLives.opp !== null && v.lives.opp < lastLives.opp && currentOppId === o.def.id;
-    el.oppLivesTop.innerHTML = heartsHTML(v.lives.opp, Math.max(o.startLives, v.lives.opp), 'mini');
+    el.oppLivesTop.textContent = v.lives.opp > 0 ? v.lives.opp + (v.lives.opp === 1 ? ' life' : ' lives') : 'flatline';
+    if (Scene) Scene.setLives('opp', v.lives.opp, Math.max(o.startLives, v.lives.opp));
     if (dropped) { FX.glitch(el.mon5, 260); }
     lastLives.opp = v.lives.opp;
-    var fsvg = el.oppFace.querySelector('svg');
-    if (fsvg && o.def.traits && o.def.traits.impatient) Face.setBlush(fsvg, o.rage);
+    var fcut = cutOf(el.oppFace);
+    if (fcut && o.def.traits && o.def.traits.impatient) Face.setBlush(fcut, o.rage);
 
     var html = '';
     if (!o.hands.length) {
@@ -229,7 +213,7 @@
       var e = v.log[i];
       var li = document.createElement('li');
       li.className = 'lg lg-' + e.who + ' lk-' + e.kind;
-      li.textContent = (e.who === 'player' ? 'YOU › ' : '') + e.text;
+      li.textContent = e.text;
       frag.appendChild(li);
     }
     list.appendChild(frag);
@@ -245,7 +229,7 @@
     var tot = 'UNKNOWN';
     if (o.reveal && o.hands.length) tot = o.hands.map(function (h) { return h.total + (h.bust ? ' BUST' : ''); }).join(' / ');
     el.logFooter.innerHTML =
-      '<span><b>LIVES</b> <em class="red">' + textHearts(v.lives.opp) + '</em></span>' +
+      '<span><b>lives</b> <em class="red">' + textHearts(v.lives.opp) + '</em></span>' +
       '<span><b>CARDS</b> ' + o.cardCount + '</span>' +
       '<span><b>ITEMS</b> ' + o.itemCount + '</span>' +
       '<span><b>TOTAL</b> ' + tot + '</span>' +
@@ -264,8 +248,9 @@
     currentDef = def;
     lastLives.opp = null;
     el.oppFace.classList.remove('eliminated');
-    el.oppFace.innerHTML = Face.build(def.look) + '<div class="signal-lost">SIGNAL LOST</div>';
-    Face.apply(el.oppFace.querySelector('svg'), baseExpr(def));
+    if (Death) Death.reset();
+    el.oppFace.innerHTML = Face.build(lookOf(def));
+    Face.apply(cutOf(el.oppFace), baseExpr(def));
     el.oppName.textContent = def.name + ' · ' + def.alias;
   }
 
@@ -277,7 +262,7 @@
 
   var exprTimer = 0;
   function setExpression(name) {
-    var svg = el.oppFace.querySelector('svg');
+    var svg = cutOf(el.oppFace);
     if (!svg) return;
     Face.apply(svg, name);
     el.oppFace.classList.remove('bob');
@@ -296,8 +281,26 @@
 
   function oppEliminated() {
     el.oppFace.classList.add('eliminated');
-    var svg = el.oppFace.querySelector('svg');
-    if (svg) Face.apply(svg, 'dead');
+    var c = cutOf(el.oppFace);
+    if (c) Face.apply(c, 'dead');
+  }
+
+  /** The competitor's death, played on the middle TV. */
+  function playDeath(def) {
+    el.oppFace.classList.add('eliminated');
+    currentOppId = null;               // rebuild the portrait next match
+    closeModal(); hideOverlay();
+    if (Scene) { Scene.zoom('m', true); Scene.setLives('opp', 0, 3); }
+    if (!Death) return Promise.resolve();
+    // Played in the close-up, like a cut-scene, then back to the room.
+    return new Promise(function (r) { setTimeout(r, 380); }).then(function () {
+      return Death.play(Death.forChar(def && (def.art || def.id)));
+    }).then(function () { if (Scene) Scene.unzoom(); });
+  }
+  function playerDeath() {
+    currentOppId = null;
+    if (Scene) Scene.unzoom();
+    return Death ? Death.player() : Promise.resolve();
   }
 
   var sayTimer = 0, sayTyping = null;
@@ -351,8 +354,15 @@
     target.classList.remove('hurt-flash');
     void target.offsetWidth;
     target.classList.add('hurt-flash');
-    if (who === 'player') document.body.classList.add('shake');
-    setTimeout(function () { document.body.classList.remove('shake'); }, 450);
+    if (Death) Death.wound(who);
+    if (who === 'player') {
+      var st = document.getElementById('stage');
+      st.classList.remove('shake'); void st.offsetWidth; st.classList.add('shake');
+      setTimeout(function () { st.classList.remove('shake'); }, 450);
+    } else {
+      var c = cutOf(el.oppFace);
+      if (c) { Face.apply(c, 'hurt'); }
+    }
   }
 
   /* ======================================================================
@@ -387,6 +397,7 @@
   var activeScreen = 'title';
   function showScreen(name) {
     activeScreen = name;
+    if (Scene && name !== null) Scene.unzoom();
     SCREENS.forEach(function (s) { el['scr_' + s].hidden = s !== name; });
     el.menuBtn.hidden = name !== null;
     el.room.setAttribute('aria-hidden', name !== null ? 'true' : 'false');
@@ -484,8 +495,10 @@
         '<div class="dossier-id">' + esc(def.alias) + ' · ' + esc(def.personality.toUpperCase()) + '</div>' +
         '<p class="dossier-text">' + esc(def.dossier) + '</p>' +
         '<p class="dossier-trait"><b>QUIRK</b>' + esc(def.traitText || '') + '</p>' +
+        '<div class="dossier-photo">' + Face.build(lookOf(def)) + '</div>' +
+        (def.deathText ? '<p class="dossier-death"><b>if he loses:</b> ' + esc(def.deathText) + '</p>' : '') +
         '<p class="dossier-quote">“' + esc(def.lines.intro[0]) + '”</p>' +
-        '<div class="dossier-lives"><span>YOU ' + heartsHTML(H.CONFIG.startingLives, H.CONFIG.startingLives, 'mini') + '</span><span>THEM ' + heartsHTML(def.lives || H.CONFIG.startingLives, def.lives || H.CONFIG.startingLives, 'mini') + '</span></div>' +
+        '<div class="dossier-lives"><span>you <b>' + H.CONFIG.startingLives + '</b></span><span>them <b>' + (def.lives || H.CONFIG.startingLives) + '</b></span></div>' +
         (conductorLine ? '<div class="dossier-conductor"><div class="cb-portrait">' + Face.conductor() + '</div><p><span class="speaker">THE CONDUCTOR</span>' + esc(conductorLine) + '</p></div>' : '') +
         '<button class="key key-primary" data-overlay="intro">BEGIN MATCH ▸</button>' +
       '</div>';
@@ -829,6 +842,9 @@
      ====================================================================== */
   function handleKey(ev) {
     var k = (ev.key || '').toLowerCase();
+    if (Scene && Scene.zoomed() && !modalState) {
+      if (k === 'escape') { Scene.unzoom(); ev.preventDefault(); return true; }
+    }
     if (modalState) {
       if (k === 'escape' && modalState.dismiss !== undefined) { closeModal(); ev.preventDefault(); }
       return true;
@@ -946,16 +962,13 @@
 
     // Effects
     FX.initStatic(el.staticCanvas);
-    FX.initParallax({ bg: el.layerBg, frames: el.layerFrames, fg: el.layerFg, root: el.room });
-    FX.onPointer(function (nx, ny) {
-      // Eyes follow the cursor: the opponent watches you.
-      var svg = el.oppFace.querySelector('svg');
-      if (!svg) return;
-      var r = el.oppFace.getBoundingClientRect();
-      var cx = r.left + r.width / 2, cy = r.top + r.height * 0.45;
-      var px = (nx + 1) / 2 * window.innerWidth, py = (ny + 1) / 2 * window.innerHeight;
-      Face.gaze(svg, (px - cx) / (window.innerWidth / 2), (py - cy) / (window.innerHeight / 2));
-    });
+    if (Scene) Scene.init();
+    window.addEventListener('pointermove', function (ev) {
+      // The opponent's eyes find you when you reach for the side screens.
+      var c = cutOf(el.oppFace);
+      if (!c) return;
+      Face.gaze(c, (ev.clientX / (window.innerWidth || 1)) * 2 - 1);
+    }, { passive: true });
   }
 
   H.UI = {
@@ -967,6 +980,8 @@
     showInfo: showInfo,
     showResult: showResult,
     setOpponent: setOpponent,
+    playDeath: playDeath,
+    playerDeath: playerDeath,
     setExpression: setExpression,
     oppEliminated: oppEliminated,
     say: say,
