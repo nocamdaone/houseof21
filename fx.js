@@ -148,7 +148,7 @@
   var A = { ctx: null, master: null, hum: null, lastType: 0 };
 
   function unlockAudio() {
-    if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+    if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); if (H.Music) H.Music.kick(); return; }
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     try {
@@ -158,6 +158,7 @@
       A.master.connect(A.ctx.destination);
       startHum();
     } catch (e) { A.ctx = null; }
+    if (A.ctx && H.Music) H.Music.kick();
   }
 
   /* Basement ambience: rumble, room air, the bulb's buzz, drips, pipes.  */
@@ -354,6 +355,7 @@
     settings.sound = !!on;
     if (A.master) A.master.gain.value = on ? 0.9 : 0;
     saveSettings();
+    if (on && H.Music) H.Music.kick();
   }
 
   function setFx(mode) {
@@ -376,6 +378,7 @@
     glitch: glitch,
     startAmbientGlitches: startAmbientGlitches,
     unlockAudio: unlockAudio,
+    audio: function () { return A; },
     buzz: buzz,
     flatline: flatline,
     sfx: sfx,

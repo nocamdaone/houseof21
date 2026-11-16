@@ -13,8 +13,8 @@
   'use strict';
 
   var ART = H.ART;
-  var CHARS = ['dennis', 'bryan', 'jack'];
-  var NAMES = { dennis: 'Dennis', bryan: 'Bryan', jack: 'Jack', conductor: 'The Conductor' };
+  var CHARS = ['dennis', 'cassie', 'bryan', 'elaine', 'jack'];
+  var NAMES = { dennis: 'Dennis', cassie: 'Cassie', bryan: 'Bryan', elaine: 'Elaine', jack: 'Jack', conductor: 'The Conductor' };
 
   /* expression -> eyes (open|closed|look|lookr|wide), nose (normal|flared), twitch */
   var EXPR = {

@@ -839,3 +839,11 @@ body.fx-low .grain, body.fx-low .beam { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---- your music ---- */
+.music-slots { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.music-slots li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-bottom: 1px solid var(--phos-faint); font-family: var(--mono); font-size: 0.8rem; }
+.music-slots .ms-name { flex: 0 0 8.5em; color: var(--phos); text-transform: lowercase; }
+.music-slots .ms-file { flex: 1 1 auto; min-width: 0; color: var(--phos-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.music-slots label.key { cursor: pointer; display: inline-flex; align-items: center; }
+.title-settings { flex-wrap: wrap; }

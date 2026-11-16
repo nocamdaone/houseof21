@@ -172,6 +172,10 @@
     el.oppLivesTop.textContent = v.lives.opp > 0 ? v.lives.opp + (v.lives.opp === 1 ? ' life' : ' lives') : 'flatline';
     if (Scene) Scene.setLives('opp', v.lives.opp, Math.max(o.startLives, v.lives.opp));
     if (dropped) { FX.glitch(el.mon5, 260); }
+    if (H.Music) {
+      var pl = v.lives.player, ol = v.lives.opp;
+      H.Music.setTension(Math.max(pl <= 1 ? 0.85 : pl === 2 ? 0.45 : 0.1, ol <= 1 ? 0.6 : ol === 2 ? 0.3 : 0));
+    }
     lastLives.opp = v.lives.opp;
     var fcut = cutOf(el.oppFace);
     if (fcut && o.def.traits && o.def.traits.impatient) Face.setBlush(fcut, o.rage);
@@ -242,7 +246,13 @@
   /* ======================================================================
      OPPONENT PORTRAIT, SPEECH, BANNERS
      ====================================================================== */
+  function musicFor(def) {
+    if (!H.Music || !def) return;
+    H.Music.play(/^(mp|ffa)-/.test(def.id || '') ? 'online' : (def.art || def.id));
+  }
+
   function setOpponent(def) {
+    musicFor(def);
     if (currentOppId === def.id && el.oppFace.firstChild) return;
     currentOppId = def.id;
     currentDef = def;
@@ -289,6 +299,7 @@
   function playDeath(def) {
     el.oppFace.classList.add('eliminated');
     currentOppId = null;               // rebuild the portrait next match
+    if (H.Music) H.Music.stop(0.5);
     closeModal(); hideOverlay();
     if (Scene) { Scene.zoom('m', true); Scene.setLives('opp', 0, 3); }
     if (!Death) return Promise.resolve();
@@ -299,6 +310,7 @@
   }
   function playerDeath() {
     currentOppId = null;
+    if (H.Music) H.Music.stop(0.4);
     if (Scene) Scene.unzoom();
     return Death ? Death.player() : Promise.resolve();
   }
@@ -401,7 +413,7 @@
     SCREENS.forEach(function (s) { el['scr_' + s].hidden = s !== name; });
     el.menuBtn.hidden = name !== null;
     el.room.setAttribute('aria-hidden', name !== null ? 'true' : 'false');
-    if (name === 'title') updateTitleSettings();
+    if (name === 'title') { updateTitleSettings(); if (H.Music) { H.Music.setTension(0); H.Music.play('title'); } }
   }
 
   function setTitleContinue(on) { el.tContinue.hidden = !on; }
@@ -409,6 +421,7 @@
   function updateTitleSettings() {
     el.tSound.textContent = 'SOUND: ' + (FX.settings.sound ? 'ON' : 'OFF');
     el.tFx.textContent = 'EFFECTS: ' + (FX.settings.fx === 'full' ? 'FULL' : 'LOW');
+    if (H.Music) el.tMusic.textContent = 'MUSIC: ' + (H.Music.on() ? 'ON' : 'OFF');
   }
 
   /* Story / cutscene text sequence */
@@ -464,6 +477,7 @@
   var resultResolve = null;
   function showResult(o) {
     showScreen('result');
+    if (H.Music) H.Music.stop(1.5);
     el.resultKicker.textContent = o.kicker || '';
     el.resultTitle.textContent = o.title || '';
     el.resultTitle.className = 'result-title ' + (o.title === 'DEFEAT' ? 'bad' : 'good');
@@ -496,7 +510,7 @@
         '<p class="dossier-text">' + esc(def.dossier) + '</p>' +
         '<p class="dossier-trait"><b>QUIRK</b>' + esc(def.traitText || '') + '</p>' +
         '<div class="dossier-photo">' + Face.build(lookOf(def)) + '</div>' +
-        (def.deathText ? '<p class="dossier-death"><b>if he loses:</b> ' + esc(def.deathText) + '</p>' : '') +
+        (def.deathText ? '<p class="dossier-death"><b>if they lose:</b> ' + esc(def.deathText) + '</p>' : '') +
         '<p class="dossier-quote">“' + esc(def.lines.intro[0]) + '”</p>' +
         '<div class="dossier-lives"><span>you <b>' + H.CONFIG.startingLives + '</b></span><span>them <b>' + (def.lives || H.CONFIG.startingLives) + '</b></span></div>' +
         (conductorLine ? '<div class="dossier-conductor"><div class="cb-portrait">' + Face.conductor() + '</div><p><span class="speaker">THE CONDUCTOR</span>' + esc(conductorLine) + '</p></div>' : '') +
@@ -810,6 +824,8 @@
         { label: 'HOW TO PLAY', value: 'how' },
         { label: 'SOUND: ' + (state.sound ? 'ON' : 'OFF'), value: 'sound' },
         { label: 'EFFECTS: ' + (state.fx === 'full' ? 'FULL' : 'LOW'), value: 'fx' },
+        { label: 'MUSIC: ' + (state.music ? 'ON' : 'OFF'), value: 'music' },
+        { label: 'YOUR MUSIC', value: 'mymusic' },
         { label: 'RESTART TOURNAMENT', value: 'restart', cls: 'key-danger' },
         { label: 'QUIT TO TITLE', value: 'title' }
       ],
@@ -880,7 +896,7 @@
       'oppName', 'oppLivesTop', 'oppFace', 'oppSpeech', 'oppCards', 'm5Overlay', 'oppStage',
       'logList', 'logFooter', 'logStatus', 'mon1', 'mon2', 'mon3', 'mon4', 'mon5', 'mon6',
       'banner', 'menuBtn', 'modalRoot', 'tooltip', 'staticCanvas',
-      'tContinue', 'tNew', 'tHow', 'tCredits', 'tSound', 'tFx',
+      'tContinue', 'tNew', 'tHow', 'tCredits', 'tSound', 'tFx', 'tMusic', 'tMyMusic',
       'storyTag', 'storyText', 'storyPortrait', 'storyNext', 'storySkip',
       'infoTitle', 'infoBody', 'infoBack',
       'resultKicker', 'resultTitle', 'resultSub', 'resultPortrait', 'resultBtn', 'resultBtn2'
@@ -922,6 +938,8 @@
     el.tHow.addEventListener('click', function () { FX.unlockAudio(); FX.sfx('click'); showInfo('how', function () { showScreen('title'); }); });
     el.tCredits.addEventListener('click', function () { FX.unlockAudio(); FX.sfx('click'); showInfo('credits', function () { showScreen('title'); }); });
     el.tSound.addEventListener('click', function () { FX.unlockAudio(); FX.setSound(!FX.settings.sound); updateTitleSettings(); FX.sfx('click'); });
+    el.tMusic.addEventListener('click', function () { FX.unlockAudio(); H.Music.setOn(!H.Music.on()); updateTitleSettings(); FX.sfx('click'); });
+    el.tMyMusic.addEventListener('click', function () { FX.unlockAudio(); FX.sfx('click'); H.Music.openPicker(); });
     el.tFx.addEventListener('click', function () { FX.setFx(FX.settings.fx === 'full' ? 'low' : 'full'); updateTitleSettings(); FX.sfx('click'); });
 
     // Story

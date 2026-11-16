@@ -1,6 +1,6 @@
 # House of 21
 
-A blackjack survival horror game that runs in the browser. You sit in a basement lit by one swinging bulb, facing four old TVs. Beat Dennis, Bryan and Jack, three lives each, using 22 items across five rarities. Lose, and you see how they go. Win, and they do.
+A blackjack survival horror game that runs in the browser. You sit in a basement lit by one swinging bulb, facing four old TVs. Beat Dennis or Cassie, Bryan or Elaine, and then Jack, three lives each, using 22 items across five rarities. Lose, and you see how they go. Win, and they do.
 
 **Play it:** open the GitHub Pages link for this repository (Settings → Pages).
 
@@ -14,6 +14,9 @@ GitHub Pages only serves static files, so there is no game server. The host play
 
 ## Look
 Photo cut-out art in black and white with red details. The cut-outs are assembled from separate eyes and noses, so faces blink, glance and flare. The screens are bent by a fisheye effect, the heart monitors speed up with every life lost, and the whole room has procedural basement sound. Contains cartoon gore.
+
+## Music
+Each battle has its own original piece, generated live in the browser like a worn record heard through a wall; it warps as lives run out. **Your music** (title screen or menu) lets each player pick their own audio file for any slot. The file stays in their browser and is never uploaded.
 
 ## Chromebook-friendly
 - Plain HTML, CSS and JavaScript.

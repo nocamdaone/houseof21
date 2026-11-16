@@ -87,7 +87,8 @@
     },
     {
       id: 'cassie', name: 'CASSIE', alias: 'THE COUNTRY GIRL', tier: 1, personality: 'Stubborn',
-      dossier: 'Drove three states for a job interview that turned out to be this. Has a rule for everything.',
+      art: 'cassie', deathText: 'cut in half.',
+      dossier: 'Drove three states for a job interview that turned out to be this. Forty years on a farm taught her one thing: have a rule for everything.',
       traitText: 'Stands on anything from 15 to 18. Every single time.',
       look: { head: 'small', skin: '#d0b49c', hair: 'braids', hairColor: '#d8b45a', shirt: '#7a4038', collar: 'open', hat: '#8a6a3e', extras: ['cowboyhat', 'freckles'] },
       traits: {},
@@ -143,6 +144,7 @@
     },
     {
       id: 'elaine', name: 'ELAINE', alias: 'THE SCAVENGER', tier: 2, personality: 'Watchful',
+      art: 'elaine', deathText: 'scalped.',
       dossier: 'Picked up off a bench outside the bus station. Her coat pockets hold more than they should.',
       traitText: 'Hoards items. Scavenges one every break, then unloads them all at once.',
       look: { head: 'round', skin: '#9e8c78', hair: 'messy-long', hairColor: '#5d5448', shirt: '#4b4a3d', collar: 'scarf', beanie: '#4b3b33', extras: ['dirt', 'bags', 'beanie'] },

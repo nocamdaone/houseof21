@@ -63,6 +63,8 @@ FILES
   story.js       all narrative text and Conductor lines
   face.js        cut-out characters: body + eye and nose pieces, blinks
   fx.js          static, glitches, procedural basement sound
+  music.js       original music per battle (generated live) and the
+                 "your music" slots kept on this device
   scene.js       the room: TVs, swinging bulb + light, parallax, cables,
                  heart monitors, fisheye screens, close-up view, cursor
   death.js       how each competitor dies, and how you do
@@ -138,17 +140,33 @@ is a separate thing.)
 
 COMPETITORS
 -----------
-Only the three competitors with art are in the tournament for now:
+Only the competitors with art are in the tournament for now. Each run
+draws one from each tier:
   Match 1  Dennis, The Insomniac   (dies by lethal injection)
+           or Cassie               (cut in half)
   Match 2  Bryan, The High Roller  (dies by the rope)
+           or Elaine               (scalped)
   Match 3  Jack, The Liar          (crushed by a barrel)
 The Conductor, a hooded figure with no face, replaces the competitor with
 a 1 in 1,000,000 chance per match (config.js conductorChance). To meet
 him, open the game with #conductor at the end of the address.
 The other twelve competitors' rules are still in opponents.js and come
 back by adding them to config.js lineupTiers once they have cut-outs.
-Deaths for Cassie (split in half), Elaine (scalped) and Delilah (shot)
-are already built in death.js, waiting for their art.
+Delilah's death (shot) is already built in death.js, waiting for her art.
+
+MUSIC
+-----
+Every competitor, the title screen, The Conductor and multiplayer have
+their own piece of music. It is original and generated live in the
+browser (music.js), so there are no music files to download. It plays
+like an old record through a basement wall, and it warps and skips more
+as lives run out. MUSIC: ON/OFF is on the title screen and in the menu.
+
+YOUR MUSIC (title screen or menu) lets a player pick their own audio
+file for any slot. The file stays in that browser on that device
+(IndexedDB): it is never uploaded or shared, and other players do not
+hear it. This is how to use songs you own without putting copyrighted
+music into the public game.
 
 ADDING A CHARACTER
 ------------------

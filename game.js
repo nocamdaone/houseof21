@@ -1334,6 +1334,7 @@
     UI.menu({
       sound: FX.settings.sound,
       fx: FX.settings.fx,
+      music: H.Music ? H.Music.on() : false,
       canQuit: true,
       saveNote: safe ? 'Progress is saved automatically.' : 'Progress saves at the next round.'
     }).then(function (choice) {
@@ -1343,6 +1344,8 @@
       } else if (choice === 'title') toTitle();
       else if (choice === 'sound') { FX.setSound(!FX.settings.sound); openMenu(); }
       else if (choice === 'fx') { FX.setFx(FX.settings.fx === 'full' ? 'low' : 'full'); openMenu(); }
+      else if (choice === 'music') { H.Music.setOn(!H.Music.on()); openMenu(); }
+      else if (choice === 'mymusic') { H.Music.openPicker().then(function () { openMenu(); }); }
     });
   }
 

@@ -40,7 +40,7 @@
   var STORE_KEY = 'house21.mp.v1';
 
   /* Player looks: the cut-out characters. */
-  var AVATARS = [{ art: 'dennis' }, { art: 'bryan' }, { art: 'jack' }];
+  var AVATARS = [{ art: 'dennis' }, { art: 'cassie' }, { art: 'bryan' }, { art: 'elaine' }, { art: 'jack' }];
 
   /* ======================================================================
      1. CARD CODEC (compact text so the table fits in presence)

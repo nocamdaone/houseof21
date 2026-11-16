@@ -68,11 +68,11 @@
 
     // ---- Competitors -----------------------------------------------------
     // One competitor per match is drawn from each tier (easier first).
-    // Only Dennis, Bryan and Jack have art so far. The other competitors'
-    // rules are still in opponents.js, ready for when their cut-outs exist.
+    // Only competitors with cut-out art are drawn. The others' rules are
+    // still in opponents.js, ready for when their art exists.
     lineupTiers: [
-      ['dennis'],
-      ['bryan'],
+      ['dennis', 'cassie'],
+      ['bryan', 'elaine'],
       ['jack']
     ],
     conductorChance: 0.000001,   // per match: one in a million
